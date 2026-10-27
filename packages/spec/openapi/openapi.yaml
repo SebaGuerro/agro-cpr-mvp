@@ -1,0 +1,624 @@
+openapi: 3.1.0
+info:
+  title: Agro CPR MVP API
+  version: 0.1.0
+  description: |
+    Skeleton frozen by Prompt 0. Every canonical event is written through POST /v1/events;
+    other resources (farms, crop cycles, CPR requests, config, imports, files) have their own endpoints.
+    Event schemas are generated from packages/spec/src/events.ts (npm run gen).
+    Amounts are integers in base units (KG, M2, ML, BRL_CENTS). Dates are America/Sao_Paulo local dates.
+servers:
+  - url: http://localhost:3001
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/me:
+    get:
+      summary: Current user, organization and role
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/farms:
+    get:
+      summary: List farms visible to the caller
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FarmPage" } } } }
+    post:
+      summary: Create a farm (PRODUCER, ADMIN)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FarmInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Farm" } } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/plots:
+    get:
+      summary: List plots (created by PLOT_REGISTERED events)
+      parameters:
+        - { name: farmId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PlotPage" } } } }
+
+  /v1/plots/{plotId}:
+    get:
+      summary: Plot detail
+      parameters: [{ $ref: "#/components/parameters/PlotId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Plot" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/plots/{plotId}/timeline:
+    get:
+      summary: Plot events in occurredAt order, including voided and corrected ones
+      parameters: [{ $ref: "#/components/parameters/PlotId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } } }
+
+  /v1/crop-cycles:
+    get:
+      summary: List crop cycles (plot + crop + season)
+      parameters:
+        - { name: stage, in: query, schema: { $ref: "#/components/schemas/CycleStage" } }
+        - { name: cprStatus, in: query, schema: { $ref: "#/components/schemas/CprStatus" } }
+        - { name: grade, in: query, schema: { $ref: "#/components/schemas/RiskGrade" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CropCyclePage" } } } }
+    post:
+      summary: Open a crop cycle and get its potential and eligible CPR volume (PRODUCER, ADMIN)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CropCycleInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CropCycle" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/crop-cycles/{cycleId}:
+    get:
+      summary: Crop cycle with stage, CPR, fulfillment and risk
+      parameters: [{ $ref: "#/components/parameters/CycleId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CropCycle" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/crop-cycles/{cycleId}/timeline:
+    get:
+      summary: Cycle events in occurredAt order, with planned vs actual dates and anchor status
+      parameters: [{ $ref: "#/components/parameters/CycleId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } } }
+
+  /v1/crop-cycles/{cycleId}/risk:
+    get:
+      summary: Current risk grade with the reasons per dimension
+      parameters: [{ $ref: "#/components/parameters/CycleId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RiskAssessment" } } } }
+
+  /v1/cpr-requests:
+    get:
+      summary: List CPR requests (producer sees own, financier sees those addressed to it)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, APPROVED, REJECTED] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CprRequest" } } } } }
+    post:
+      summary: Request a CPR for a crop cycle (PRODUCER, ADMIN)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CprRequestInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CprRequest" } } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/cpr-requests/{requestId}/approve:
+    post:
+      summary: Approve and issue the CPR (FINANCIER, ADMIN). Emits CPR_ISSUED.
+      parameters: [{ $ref: "#/components/parameters/RequestId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CprApproval" } } }
+      responses:
+        "200": { description: Issued, content: { application/json: { schema: { $ref: "#/components/schemas/CprRequest" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/cpr-requests/{requestId}/reject:
+    post:
+      summary: Reject a CPR request (FINANCIER, ADMIN)
+      parameters: [{ $ref: "#/components/parameters/RequestId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5 } } } } }
+      responses:
+        "200": { description: Rejected, content: { application/json: { schema: { $ref: "#/components/schemas/CprRequest" } } } }
+
+  /v1/events:
+    post:
+      summary: Submit a canonical event
+      description: |
+        The client generates `id` (UUIDv7); it is the idempotency key.
+        Same id and same content again returns 200 with the existing record. Same id with different content returns 409.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "../generated/CanonicalEvent.schema.json" } } }
+      responses:
+        "201": { description: "Accepted; anchor is PENDING", content: { application/json: { schema: { $ref: "../generated/EventRecord.schema.json" } } } }
+        "200": { description: Duplicate submission, content: { application/json: { schema: { $ref: "../generated/EventRecord.schema.json" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/events/{eventId}:
+    get:
+      summary: Event with anchor status (PENDING, ANCHORED, FAILED)
+      parameters: [{ name: eventId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "../generated/EventRecord.schema.json" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/files:
+    post:
+      summary: Upload evidence. The server computes SHA-256; use it as evidenceHash.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: Stored, content: { application/json: { schema: { $ref: "#/components/schemas/FileRef" } } } }
+        "413": { $ref: "#/components/responses/Problem" }
+
+  /v1/alerts:
+    get:
+      summary: Alerts visible to the caller
+      parameters:
+        - { name: open, in: query, schema: { type: boolean, default: true } }
+        - { name: cycleId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Alert" } } } } }
+
+  /v1/alerts/{alertId}/ack:
+    post:
+      summary: Acknowledge an alert. Does not clear the underlying risk.
+      parameters: [{ name: alertId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Alert" } } } }
+
+  /v1/portfolio:
+    get:
+      summary: Financier portfolio summary (FINANCIER, ADMIN)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Portfolio" } } } }
+
+  /v1/warehouses/{warehouseOrgId}/expected-arrivals:
+    get:
+      summary: Trucks dispatched to this warehouse and not yet received (WAREHOUSE, ADMIN)
+      parameters: [{ name: warehouseOrgId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ExpectedArrival" } } } } }
+
+  /v1/config/planting-windows:
+    get:
+      summary: Planting windows
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PlantingWindow" } } } } }
+    put:
+      summary: Replace planting windows (ADMIN)
+      requestBody: { required: true, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PlantingWindow" } } } } }
+      responses:
+        "200": { description: OK }
+
+  /v1/config/haircuts:
+    get:
+      summary: Haircut per crop
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Haircut" } } } } }
+    put:
+      summary: Replace haircuts (ADMIN)
+      requestBody: { required: true, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Haircut" } } } } }
+      responses:
+        "200": { description: OK }
+
+  /v1/config/discount-tables:
+    get:
+      summary: Quality discount table per crop
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/DiscountTable" } } } } }
+    put:
+      summary: Replace discount tables (ADMIN)
+      requestBody: { required: true, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/DiscountTable" } } } } }
+      responses:
+        "200": { description: OK }
+
+  /v1/config/checklists:
+    get:
+      summary: Input-application checklist templates
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ChecklistTemplate" } } } } }
+    put:
+      summary: Replace checklist templates (ADMIN)
+      requestBody: { required: true, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ChecklistTemplate" } } } } }
+      responses:
+        "200": { description: OK }
+
+  /v1/imports:
+    post:
+      summary: Upload a CSV batch (ADMIN). dryRun=true validates without writing.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind: { type: string, enum: [PLOTS, PLANTINGS, INPUT_APPLICATIONS, DELIVERIES, PLANTING_WINDOWS, DISCOUNT_TABLES] }
+                dryRun: { type: boolean, default: true }
+                file: { type: string, format: binary }
+      responses:
+        "201": { description: Batch created, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+
+  /v1/imports/{batchId}:
+    get:
+      summary: Batch status and row-level errors
+      parameters: [{ name: batchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+
+  /v1/imports/{batchId}/rollback:
+    post:
+      summary: Roll back a batch. Only while none of its events is anchored.
+      parameters: [{ name: batchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: Rolled back, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT, description: Supabase Auth access token }
+
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    PlotId: { name: plotId, in: path, required: true, schema: { type: string, format: uuid } }
+    CycleId: { name: cycleId, in: path, required: true, schema: { type: string, format: uuid } }
+    RequestId: { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          enum:
+            - UNAUTHENTICATED
+            - FORBIDDEN_ROLE
+            - FORBIDDEN_ORG
+            - VALIDATION_FAILED
+            - NOT_FOUND
+            - INVALID_TRANSITION
+            - CPR_ALREADY_EXISTS
+            - ISSUED_ABOVE_ELIGIBLE
+            - WRONG_WAREHOUSE
+            - DELIVERY_NOT_FOUND
+            - QUANTITY_EXCEEDS_AVAILABLE
+            - EVIDENCE_REQUIRED
+            - EVENT_ID_CONFLICT
+            - CORRECTION_BREAKS_STREAM
+            - BATCH_ALREADY_ANCHORED
+        errors:
+          type: array
+          items: { type: object, properties: { path: { type: string }, message: { type: string } } }
+
+    Role: { type: string, enum: [PRODUCER, WAREHOUSE, BUYER, FINANCIER, ADMIN] }
+    Crop: { type: string, enum: [SOJA, MILHO, TRIGO, SORGO, FEIJAO] }
+    SeasonCode: { type: string, pattern: '^\d{4}/\d{2}-(SAFRA|SAFRINHA|UNICA)$', examples: ["2026/27-SAFRA"] }
+    CycleStage: { type: string, enum: [CREATED, PLANTED, HARVEST_PLANNED, HARVESTING, DELIVERING, DELIVERED, CLOSED] }
+    CprStatus: { type: string, enum: [NONE, ISSUED, FUNDED, SETTLED] }
+    RiskGrade: { type: string, enum: [A, B, C, D] }
+
+    Me:
+      type: object
+      required: [userId, orgId, orgName, role]
+      properties:
+        userId: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        orgName: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+
+    FarmInput:
+      type: object
+      required: [name, uf, municipalityIbge]
+      properties:
+        name: { type: string, maxLength: 120 }
+        uf: { type: string, minLength: 2, maxLength: 2 }
+        municipalityIbge: { type: string, pattern: '^\d{7}$' }
+        producerOrgId: { type: string, format: uuid, description: Required when the caller is ADMIN }
+    Farm:
+      allOf:
+        - $ref: "#/components/schemas/FarmInput"
+        - type: object
+          required: [id, producerOrgId]
+          properties: { id: { type: string, format: uuid }, producerOrgId: { type: string, format: uuid } }
+    FarmPage:
+      type: object
+      required: [items]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/Farm" } }, nextCursor: { type: [string, "null"] } }
+
+    Plot:
+      type: object
+      required: [id, farmId, name, areaM2, uf, municipalityIbge, hasSoilAnalysis]
+      properties:
+        id: { type: string, format: uuid }
+        farmId: { type: string, format: uuid }
+        name: { type: string }
+        areaM2: { type: integer }
+        carCode: { type: [string, "null"] }
+        uf: { type: string }
+        municipalityIbge: { type: string }
+        hasSoilAnalysis: { type: boolean }
+        latestSoilAnalysisOn: { type: [string, "null"], format: date }
+    PlotPage:
+      type: object
+      required: [items]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/Plot" } }, nextCursor: { type: [string, "null"] } }
+
+    CropCycleInput:
+      type: object
+      required: [plotId, crop, seasonCode, expectedYieldKgPerHa]
+      properties:
+        plotId: { type: string, format: uuid }
+        crop: { $ref: "#/components/schemas/Crop" }
+        seasonCode: { $ref: "#/components/schemas/SeasonCode" }
+        expectedYieldKgPerHa: { type: integer, minimum: 1, description: "e.g. 3600 = 60 sc/ha" }
+    CropCycle:
+      type: object
+      required: [id, plotId, producerOrgId, crop, seasonCode, areaM2, expectedYieldKgPerHa, potentialKg, haircutBps, eligibleKg, stage, cpr, fulfillment, risk]
+      properties:
+        id: { type: string, format: uuid }
+        plotId: { type: string, format: uuid }
+        producerOrgId: { type: string, format: uuid }
+        crop: { $ref: "#/components/schemas/Crop" }
+        seasonCode: { $ref: "#/components/schemas/SeasonCode" }
+        areaM2: { type: integer }
+        expectedYieldKgPerHa: { type: integer }
+        potentialKg: { type: integer }
+        haircutBps: { type: integer }
+        eligibleKg: { type: integer }
+        stage: { $ref: "#/components/schemas/CycleStage" }
+        cpr:
+          type: object
+          required: [status]
+          properties:
+            status: { $ref: "#/components/schemas/CprStatus" }
+            tokenId: { type: [string, "null"], description: uint256 as decimal string }
+            cprNumber: { type: [string, "null"] }
+            issuedKg: { type: [integer, "null"] }
+            dueDate: { type: [string, "null"], format: date }
+            warehouseOrgId: { type: [string, "null"], format: uuid }
+            financierOrgId: { type: [string, "null"], format: uuid }
+            fundedBrlCents: { type: integer }
+        fulfillment:
+          type: object
+          required: [pledgedKg, deliveredNetKg, fulfilledBps, trucksInTransit]
+          properties:
+            pledgedKg: { type: integer }
+            deliveredNetKg: { type: integer }
+            fulfilledBps: { type: integer, description: "10000 = 100%" }
+            trucksInTransit: { type: integer }
+        risk: { $ref: "#/components/schemas/RiskSummary" }
+    CropCyclePage:
+      type: object
+      required: [items]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/CropCycle" } }, nextCursor: { type: [string, "null"] } }
+
+    Timeline:
+      type: object
+      required: [subjectType, subjectId, events]
+      properties:
+        subjectType: { type: string, enum: [PLOT, CROP_CYCLE] }
+        subjectId: { type: string, format: uuid }
+        events: { type: array, items: { $ref: "../generated/EventRecord.schema.json" } }
+        planned:
+          type: object
+          properties:
+            harvestStart: { type: [string, "null"], format: date }
+            harvestEnd: { type: [string, "null"], format: date }
+            deliveryWindowEnd: { type: [string, "null"], format: date }
+            cprDueDate: { type: [string, "null"], format: date }
+
+    RiskSummary:
+      type: object
+      required: [grade, score]
+      properties:
+        grade: { $ref: "#/components/schemas/RiskGrade" }
+        score: { type: integer, minimum: 0, maximum: 100, description: Higher is riskier }
+    RiskAssessment:
+      allOf:
+        - $ref: "#/components/schemas/RiskSummary"
+        - type: object
+          required: [dimensions, computedAt]
+          properties:
+            computedAt: { type: string, format: date-time }
+            dimensions:
+              type: array
+              items:
+                type: object
+                required: [dimension, score, reasons]
+                properties:
+                  dimension: { type: string, enum: [PLANTING_WINDOW, INPUT_COMPLIANCE, HARVEST_DELIVERY] }
+                  score: { type: integer, minimum: 0, maximum: 100 }
+                  reasons:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, message]
+                      properties:
+                        code: { type: string, examples: [PLANTED_OUTSIDE_WINDOW, APPLICATION_MISSING, DELIVERY_SHORTFALL] }
+                        message: { type: string }
+                        eventId: { type: [string, "null"], format: uuid }
+
+    CprRequestInput:
+      type: object
+      required: [cropCycleId, requestedKg, warehouseOrgId, financierOrgId, dueDate]
+      properties:
+        cropCycleId: { type: string, format: uuid }
+        requestedKg: { type: integer, minimum: 1 }
+        warehouseOrgId: { type: string, format: uuid }
+        financierOrgId: { type: string, format: uuid }
+        dueDate: { type: string, format: date }
+    CprApproval:
+      type: object
+      required: [eventId, cprNumber, issuedKg, deliveryWindowStart, deliveryWindowEnd]
+      properties:
+        eventId: { type: string, format: uuid, description: Client-generated id of the CPR_ISSUED event }
+        cprNumber: { type: string }
+        issuedKg: { type: integer, minimum: 1 }
+        deliveryWindowStart: { type: string, format: date }
+        deliveryWindowEnd: { type: string, format: date }
+    CprRequest:
+      allOf:
+        - $ref: "#/components/schemas/CprRequestInput"
+        - type: object
+          required: [id, status, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+            decisionReason: { type: [string, "null"] }
+            issuedEventId: { type: [string, "null"], format: uuid }
+            createdAt: { type: string, format: date-time }
+
+    FileRef:
+      type: object
+      required: [fileId, sha256, contentType, sizeBytes, url]
+      properties:
+        fileId: { type: string, format: uuid }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        url: { type: string, description: Short-lived signed URL }
+
+    Alert:
+      type: object
+      required: [id, type, severity, cropCycleId, message, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [PLANTED_OUTSIDE_WINDOW, APPLICATION_MISSING, APPLICATION_LATE, HARVEST_NOT_PLANNED, HARVEST_OVERDUE, DELIVERY_OVERDUE, DELIVERY_SHORTFALL, QUALITY_TICKET_MISMATCH, CPR_DUE_SOON, INFO_REQUEST_OPEN, ANCHOR_FAILED]
+        severity: { type: string, enum: [INFO, WARNING, HIGH] }
+        cropCycleId: { type: string, format: uuid }
+        eventId: { type: [string, "null"], format: uuid }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        ackedAt: { type: [string, "null"], format: date-time }
+        ackedBy: { type: [string, "null"], format: uuid }
+
+    Portfolio:
+      type: object
+      required: [cprCount, issuedKg, deliveredNetKg, fundedBrlCents, byGrade, openHighAlerts]
+      properties:
+        cprCount: { type: integer }
+        issuedKg: { type: integer }
+        deliveredNetKg: { type: integer }
+        fundedBrlCents: { type: integer }
+        byGrade: { type: object, properties: { A: { type: integer }, B: { type: integer }, C: { type: integer }, D: { type: integer } } }
+        openHighAlerts: { type: integer }
+
+    ExpectedArrival:
+      type: object
+      required: [deliveryId, cropCycleId, truckPlate, estimatedKg, expectedArrivalAt, arrived]
+      properties:
+        deliveryId: { type: string, format: uuid }
+        cropCycleId: { type: string, format: uuid }
+        producerName: { type: string }
+        truckPlate: { type: string }
+        estimatedKg: { type: integer }
+        expectedArrivalAt: { type: string, format: date-time }
+        arrived: { type: boolean }
+
+    PlantingWindow:
+      type: object
+      required: [crop, season, uf, startMonthDay, endMonthDay, source, isSample]
+      properties:
+        id: { type: string, format: uuid }
+        crop: { $ref: "#/components/schemas/Crop" }
+        season: { type: string, enum: [SAFRA, SAFRINHA, UNICA] }
+        uf: { type: string }
+        municipalityIbge: { type: [string, "null"], description: Null = whole state }
+        startMonthDay: { type: string, pattern: '^\d{2}-\d{2}$', description: "MM-DD; a window may cross the year end" }
+        endMonthDay: { type: string, pattern: '^\d{2}-\d{2}$' }
+        source: { type: string, examples: ["ZARC portaria", "manual"] }
+        isSample: { type: boolean, description: True for placeholder values not taken from an official source }
+
+    Haircut:
+      type: object
+      required: [crop, haircutBps]
+      properties:
+        crop: { $ref: "#/components/schemas/Crop" }
+        haircutBps: { type: integer, minimum: 0, maximum: 10000, description: "8000 = 80% of potential is eligible" }
+
+    DiscountTable:
+      type: object
+      required: [crop, moistureBasePct, moistureDiscountPerPointPct, impurityBasePct, impurityDiscountPerPointPct]
+      properties:
+        crop: { $ref: "#/components/schemas/Crop" }
+        moistureBasePct: { type: number }
+        moistureDiscountPerPointPct: { type: number }
+        impurityBasePct: { type: number }
+        impurityDiscountPerPointPct: { type: number }
+        damagedBasePct: { type: [number, "null"] }
+        damagedDiscountPerPointPct: { type: [number, "null"] }
+        isSample: { type: boolean }
+
+    ChecklistTemplate:
+      type: object
+      required: [id, crop, items]
+      properties:
+        id: { type: string, format: uuid }
+        crop: { $ref: "#/components/schemas/Crop" }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, category, description, fromDay, toDay]
+            properties:
+              id: { type: string, format: uuid }
+              category: { type: string, enum: [SEED, FERTILIZER, HERBICIDE, INSECTICIDE, FUNGICIDE, OTHER] }
+              description: { type: string }
+              fromDay: { type: integer, description: Days relative to planting start; negative = before planting }
+              toDay: { type: integer }
+
+    ImportBatch:
+      type: object
+      required: [id, kind, dryRun, status, totalRows, acceptedRows, rejectedRows, errors]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        dryRun: { type: boolean }
+        status: { type: string, enum: [VALIDATED, APPLIED, ROLLED_BACK, FAILED] }
+        totalRows: { type: integer }
+        acceptedRows: { type: integer }
+        rejectedRows: { type: integer }
+        errors:
+          type: array
+          items: { type: object, required: [row, message], properties: { row: { type: integer }, column: { type: string }, message: { type: string } } }

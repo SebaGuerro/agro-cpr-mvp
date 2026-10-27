@@ -1,0 +1,24 @@
+{
+  "name": "@agro-cpr/spec",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./keys": "./src/keys.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "gen": "tsx scripts/gen-json-schema.ts",
+    "check:sol": "solcjs --abi contracts/IAgroLedger.sol -o generated/abi"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "solc": "0.8.24",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
