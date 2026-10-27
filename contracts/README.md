@@ -90,7 +90,7 @@ Events emitted: `EventRecorded` for every event, `CprIssued`, `CprSettled`, and 
 |---|---|---|---|
 | 1 | Relayer key leaks | Attacker anchors fake events or CPRs | Key only in the secret store with a small balance; the Safe can pause and `revokeRole`; reconciliation flags on-chain events with no DB row |
 | 2 | Backend bug or compromise writes false data | The chain faithfully anchors false facts | Audit log with `recordedBy`, evidence hashes, human review of CPR issuance. The chain is tamper-evident, not a truth oracle |
-| 3 | The same land registered as two plots | Double pledge goes undetected | Backend rejects a duplicate CAR code; polygon-overlap check (PostGIS) after the MVP |
+| 3 | The same land registered as two plots | Double pledge goes undetected | Backend rejects a CAR code already registered by a different producer (`LAND_ALREADY_REGISTERED`); polygon-overlap check (PostGIS) after the MVP |
 | 4 | Public chain shows volumes, dates and activity per pseudonymous key | Commercial information about producers leaks, even without names | Testnet pilot with test data; before mainnet, choose between dropping quantities on-chain and a permissioned chain (LGPD: verify with counsel) |
 | 5 | `LEDGER_KEY_SECRET` leaks together with the database | On-chain keys can be linked to internal IDs | Keep the secret outside the DB; keys come from UUIDs, never CPF/CNPJ |
 | 6 | Safe signers lost, or two collude | Can't pause or revoke, or admin abuse | 2-of-3 across different people; record the signers' addresses in the runbook |

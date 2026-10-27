@@ -127,7 +127,16 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/CprApproval" } } }
       responses:
-        "200": { description: Issued, content: { application/json: { schema: { $ref: "#/components/schemas/CprRequest" } } } }
+        "200":
+          description: Issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CprRequest"
+                  - type: object
+                    required: [issuedEvent]
+                    properties: { issuedEvent: { $ref: "../generated/EventRecord.schema.json" } }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
 
@@ -325,6 +334,9 @@ components:
             - EVENT_ID_CONFLICT
             - CORRECTION_BREAKS_STREAM
             - BATCH_ALREADY_ANCHORED
+            - LAND_ALREADY_REGISTERED
+            - CYCLE_ALREADY_EXISTS
+            - INTERNAL
         errors:
           type: array
           items: { type: object, properties: { path: { type: string }, message: { type: string } } }
@@ -524,9 +536,10 @@ components:
         id: { type: string, format: uuid }
         type:
           type: string
-          enum: [PLANTED_OUTSIDE_WINDOW, APPLICATION_MISSING, APPLICATION_LATE, HARVEST_NOT_PLANNED, HARVEST_OVERDUE, DELIVERY_OVERDUE, DELIVERY_SHORTFALL, QUALITY_TICKET_MISMATCH, CPR_DUE_SOON, INFO_REQUEST_OPEN, ANCHOR_FAILED]
+          enum: [PLANTED_OUTSIDE_WINDOW, PLANTING_WINDOW_MISSED, APPLICATION_MISSING, APPLICATION_LATE, HARVEST_NOT_PLANNED, HARVEST_OVERDUE, DELIVERY_OVERDUE, DELIVERY_SHORTFALL, QUALITY_TICKET_MISMATCH, CPR_DUE_SOON, INFO_REQUEST_OPEN, ANCHOR_FAILED]
         severity: { type: string, enum: [INFO, WARNING, HIGH] }
-        cropCycleId: { type: string, format: uuid }
+        cropCycleId: { type: [string, "null"], format: uuid, description: Null for alerts about a plot }
+        resolvedAt: { type: [string, "null"], format: date-time }
         eventId: { type: [string, "null"], format: uuid }
         message: { type: string }
         createdAt: { type: string, format: date-time }

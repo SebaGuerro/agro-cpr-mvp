@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "gen": "tsx scripts/gen-json-schema.ts",
+    "gen:abi": "tsx scripts/gen-abi.ts",
     "check:sol": "solcjs --abi contracts/IAgroLedger.sol -o generated/abi"
   },
   "dependencies": {
