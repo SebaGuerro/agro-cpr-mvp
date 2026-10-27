@@ -49,7 +49,7 @@ export const eventRoutes =
           await deps.storage.put(storagePath, data, part.mimetype);
           const [inserted] = await db
             .insert(files)
-            .values({ sha256, contentType: part.mimetype, sizeBytes: data.length, storagePath, uploadedBy: actor.userId, createdAt: deps.now() })
+            .values({ sha256, contentType: part.mimetype, sizeBytes: data.length, storagePath, fileName: part.filename || null, uploadedBy: actor.userId, createdAt: deps.now() })
             .returning();
           return inserted!;
         })());
@@ -57,6 +57,7 @@ export const eventRoutes =
       return reply.code(existing ? 200 : 201).send({
         fileId: row.id,
         sha256: row.sha256,
+        fileName: row.fileName,
         contentType: row.contentType,
         sizeBytes: row.sizeBytes,
         url: await deps.storage.url(row.storagePath),

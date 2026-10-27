@@ -152,6 +152,8 @@ export function eventRecordView(row: EventRow, voided: boolean, correctedBy: str
     },
     voided,
     correctedBy,
+    provenance: row.importBatchId ? "IMPORTED" : "MANUAL",
+    importBatchId: row.importBatchId,
   };
 }
 

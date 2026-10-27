@@ -1,8 +1,11 @@
-# @agro-cpr/api: backend (Prompt 2)
+# @agro-cpr/api: backend (Prompts 2 and 3)
 
-The domain API, rules engine, risk scoring, alerts and the relayer that anchors events on AgroLedger. It implements [`openapi.yaml`](../../packages/spec/openapi/openapi.yaml) except the CSV imports, which are Block 3.
+The domain API, rules engine, risk scoring, alerts, the CSV and Excel imports (see [`src/ingestion/README.md`](src/ingestion/README.md)), and the relayer that anchors events on AgroLedger. It implements [`openapi.yaml`](../../packages/spec/openapi/openapi.yaml).
 
-**Status:** typechecks, and 34 tests pass (16 rule tests, plus 18 integration tests that run the real app against an embedded Postgres loaded with the seed scenario). A local smoke run (migrate, seed, start, authenticated reads) works. **Not yet tested:** a real Supabase project, a real Base Sepolia contract through the viem adapter, pg-boss on real Postgres, and the Docker image and Fly deploy.
+**Status:** typechecks, and 63 tests pass:
+- 16 rule tests
+- 8 parsing tests
+- 39 integration tests that run the real app against an embedded Postgres loaded with the seed scenario (18 for the API, 21 for imports) A local smoke run (migrate, seed, start, authenticated reads) works. **Not yet tested:** a real Supabase project, a real Base Sepolia contract through the viem adapter, pg-boss on real Postgres, and the Docker image and Fly deploy.
 
 ## Locked choices
 
@@ -39,6 +42,7 @@ npm test -w @agro-cpr/api
 | `src/domain/` | Pure rules, no I/O: state machine and replay (`cycleState.ts`), planting windows, checklist, quantities and discounts, findings and risk (`findings.ts`) |
 | `src/services/` | Recording events (authorization, validation, persistence), crop cycles and CPR requests, read views and visibility, configs, alert sync |
 | `src/routes/` | Fastify routes, one file per area |
+| `src/ingestion/` | Spreadsheet parsing, the `IngestionSource` port, import kinds, templates and annotated files |
 | `src/chain/` | Ledger keys and `EventInput` encoding, mock chain, viem adapter for Base Sepolia |
 | `src/jobs/` | Anchoring sweep, reconciliation, pg-boss and timer runners |
 | `src/seed/` | The demo scenario, created through the same services as the API |
@@ -62,6 +66,7 @@ The client generates the event `id`. Resending the same event returns `200` with
 - A failure blocks only that subject's later events. After 5 attempts it raises a HIGH `ANCHOR_FAILED` alert.
 - Every 30 minutes, reconciliation recomputes each subject's hash chain from Postgres and compares it with `headOf` on the contract. A mismatch raises `ANCHOR_FAILED`.
 - pg-boss uses the `stately` policy, so a sweep never overlaps another, even if a second machine is added.
+- **Imported events wait `IMPORT_HOLD_MINUTES` (default 30)** before anchoring, and so does anything recorded after them on the same subject. That wait is the rollback window for a wrong file.
 - **Batching:** one transaction per event is enough for the pilot (about 2 s each on Base). If CSV imports make this slow, switch the worker to `recordEvents` in batches of 50.
 
 ## Risk grade
@@ -108,7 +113,3 @@ All planting windows, discount tables and checklists in the seed are **samples**
 - The API connects with the database owner role. Supabase row-level security isn't used, so authorization lives entirely in `services/`.
 - Alerts are in-app only (no email or WhatsApp yet).
 - `GET /v1/config/*` is readable by every role, so the front-end can warn about the planting window before submitting.
-
-## Left for Block 3 (middleware)
-
-`POST /v1/imports`, `GET /v1/imports/{id}` and `POST /v1/imports/{id}/rollback` aren't built. The `events.import_batch_id` column and `recordEvent(..., { importBatchId })` are already in place for them.

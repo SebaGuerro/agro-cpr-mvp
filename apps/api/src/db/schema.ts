@@ -175,9 +175,54 @@ export const files = pgTable("files", {
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   storagePath: text("storage_path").notNull(),
+  // Name of the first upload; imports can reference evidence by it.
+  fileName: text("file_name"),
   uploadedBy: uuid("uploaded_by").notNull(),
   createdAt: createdAt(),
 });
+
+export const IMPORT_KINDS = ["PLOTS", "PLANTINGS", "INPUT_APPLICATIONS", "DELIVERIES", "PLANTING_WINDOWS", "DISCOUNT_TABLES"] as const;
+export const IMPORT_STATUSES = ["VALIDATED", "APPLIED", "ROLLED_BACK", "FAILED"] as const;
+
+export interface ImportRowError {
+  row: number;
+  column?: string;
+  code?: string;
+  message: string;
+}
+
+export const importBatches = pgTable(
+  "import_batches",
+  {
+    id: uuid("id").primaryKey(),
+    kind: text("kind", { enum: IMPORT_KINDS }).notNull(),
+    dryRun: boolean("dry_run").notNull(),
+    status: text("status", { enum: IMPORT_STATUSES }).notNull(),
+    source: text("source").notNull(), // SPREADSHEET today; integrations later
+    provenance: text("provenance", { enum: ["MANUAL", "IMPORTED", "VERIFIED"] }).notNull(),
+    fileName: text("file_name"),
+    fileSha256: text("file_sha256").notNull(),
+    format: text("format", { enum: ["CSV", "XLSX"] }).notNull(),
+    totalRows: integer("total_rows").notNull(),
+    acceptedRows: integer("accepted_rows").notNull(),
+    unchangedRows: integer("unchanged_rows").notNull(),
+    rejectedRows: integer("rejected_rows").notNull(),
+    eventCount: integer("event_count").notNull(),
+    errors: jsonb("errors").$type<ImportRowError[]>().notNull(),
+    // The parsed sheet, kept to apply a dry run later and to build the annotated file.
+    headers: jsonb("headers").$type<string[]>().notNull(),
+    rows: jsonb("rows").$type<{ n: number; cells: (string | number | null)[] }[]>().notNull(),
+    // Config kinds replace a whole table: what was there before, and what this batch wrote.
+    configSnapshot: jsonb("config_snapshot").$type<{ previous: unknown[]; applied: unknown[] }>(),
+    createdBy: uuid("created_by").notNull(),
+    actorOrgId: uuid("actor_org_id").notNull(),
+    createdAt: createdAt(),
+    appliedAt: ts("applied_at"),
+    rolledBackAt: ts("rolled_back_at"),
+    rolledBackBy: uuid("rolled_back_by"),
+  },
+  (t) => [index("import_batches_org_idx").on(t.actorOrgId, t.createdAt)],
+);
 
 export const ALERT_SEVERITIES = ["INFO", "WARNING", "HIGH"] as const;
 

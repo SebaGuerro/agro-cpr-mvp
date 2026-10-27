@@ -30,8 +30,9 @@ const storage =
     : diskStorage(env.LOCAL_STORAGE_DIR);
 
 const log = (msg: string, err?: unknown) => console.error(`[jobs] ${msg}`, err ?? "");
+const importHoldMs = env.IMPORT_HOLD_MINUTES * 60_000;
 const tasks = {
-  anchor: () => anchorPending(handle.db, chain, keys, { now }),
+  anchor: () => anchorPending(handle.db, chain, keys, { now, importHoldMs }),
   alerts: () => syncCycleAlerts(handle.db, "all", { now: now(), toleranceBps: env.DELIVERY_TOLERANCE_BPS }),
   reconcile: () => reconcileAnchors(handle.db, chain, keys, { now }),
 };
@@ -50,6 +51,7 @@ const app = await buildApp({
   toleranceBps: env.DELIVERY_TOLERANCE_BPS,
   corsOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()),
   onEventRecorded: () => jobs?.triggerAnchor(),
+  importHoldMs,
   logger: true,
 });
 

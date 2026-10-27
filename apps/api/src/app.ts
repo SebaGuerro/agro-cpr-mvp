@@ -14,6 +14,7 @@ import { configRoutes } from "./routes/config.js";
 import { coreRoutes } from "./routes/core.js";
 import { cycleRoutes } from "./routes/cycles.js";
 import { eventRoutes } from "./routes/events.js";
+import { importRoutes } from "./routes/imports.js";
 import type { FileStorage } from "./storage.js";
 
 export interface AppDeps {
@@ -26,6 +27,8 @@ export interface AppDeps {
   corsOrigins: string[];
   /** Called after an event is accepted, e.g. to wake the anchoring worker. */
   onEventRecorded?: () => void;
+  /** How long imported events wait before anchoring (the rollback window). Default 30 minutes. */
+  importHoldMs?: number;
   logger?: boolean;
 }
 
@@ -94,5 +97,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(eventRoutes(deps));
   await app.register(alertRoutes(deps));
   await app.register(configRoutes(deps));
+  await app.register(importRoutes(deps));
   return app;
 }

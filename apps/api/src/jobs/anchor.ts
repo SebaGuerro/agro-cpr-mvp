@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt, not, sql } from "drizzle-orm";
 import type { Hex } from "viem";
 import { nextHead, toCprInput, toEventInput, ZERO32, type AnchorReceipt, type ChainAdapter, type LedgerKeys } from "../chain/ledger.js";
 import type { Db } from "../db/client.js";
@@ -7,6 +7,8 @@ import { raiseAlert, resolveAlert } from "../services/alerts.js";
 import type { EventRow } from "../services/events.js";
 
 export const MAX_ANCHOR_ATTEMPTS = 5;
+/** Imported events wait this long before anchoring, so a wrong file can still be rolled back. */
+export const IMPORT_HOLD_MS = 30 * 60 * 1000;
 
 interface SubjectRef {
   key: Hex;
@@ -34,18 +36,30 @@ function subjectResolver(db: Db, keys: LedgerKeys) {
 /**
  * Sends pending events to the chain, one transaction each, in insertion order.
  * A failure blocks the rest of that subject's events (the hash chain and
- * corrections depend on order) but not other subjects.
+ * corrections depend on order) but not other subjects. Imported events still in
+ * their hold window are skipped, and so is everything after them on the same subject.
  */
 export async function anchorPending(
   db: Db,
   chain: ChainAdapter,
   keys: LedgerKeys,
-  opts: { now: () => Date; limit?: number },
+  opts: { now: () => Date; limit?: number; importHoldMs?: number },
 ): Promise<{ anchored: number; failed: number; skipped: number }> {
+  const cutoff = new Date(opts.now().getTime() - (opts.importHoldMs ?? IMPORT_HOLD_MS)).toISOString();
+  const held = sql`(${events.importBatchId} is not null and ${events.recordedAt} > ${cutoff}::timestamptz)`;
+  const heldEarlier = sql`exists (select 1 from ${events} as h where h.subject_id = ${events.subjectId} and h.seq < ${events.seq}
+    and h.anchor_status = 'PENDING' and h.import_batch_id is not null and h.recorded_at > ${cutoff}::timestamptz)`;
   const rows = await db
     .select()
     .from(events)
-    .where(and(inArray(events.anchorStatus, ["PENDING", "FAILED"]), lt(events.anchorAttempts, MAX_ANCHOR_ATTEMPTS)))
+    .where(
+      and(
+        inArray(events.anchorStatus, ["PENDING", "FAILED"]),
+        lt(events.anchorAttempts, MAX_ANCHOR_ATTEMPTS),
+        not(held),
+        not(heldEarlier),
+      ),
+    )
     .orderBy(asc(events.seq))
     .limit(opts.limit ?? 50);
   const stuck = await db

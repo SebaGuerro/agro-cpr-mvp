@@ -259,9 +259,25 @@ paths:
       responses:
         "200": { description: OK }
 
+  /v1/imports/templates/{kind}:
+    get:
+      summary: Excel template for one import kind, with the caller's valid farms, plots, seasons, checklist items and evidence files
+      parameters: [{ $ref: "#/components/parameters/ImportKind" }]
+      responses:
+        "200": { description: .xlsx file, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+
   /v1/imports:
+    get:
+      summary: The caller's organization's latest 100 batches (all batches for ADMIN)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ImportBatch" } } } } }
     post:
-      summary: Upload a CSV batch (ADMIN). dryRun=true validates without writing.
+      summary: |
+        Upload a CSV or .xlsx file (up to 2,000 rows). dryRun=true (default) validates every row and writes nothing.
+        A batch applies whole or not at all. Rows go through the same rules as POST /v1/events.
+        Roles: PLOTS, PLANTINGS and INPUT_APPLICATIONS for PRODUCER and ADMIN; DELIVERIES for PRODUCER, WAREHOUSE
+        and ADMIN (each stage still needs its role); PLANTING_WINDOWS and DISCOUNT_TABLES for ADMIN and replace the whole table.
       requestBody:
         required: true
         content:
@@ -270,26 +286,48 @@ paths:
               type: object
               required: [kind, file]
               properties:
-                kind: { type: string, enum: [PLOTS, PLANTINGS, INPUT_APPLICATIONS, DELIVERIES, PLANTING_WINDOWS, DISCOUNT_TABLES] }
+                kind: { $ref: "#/components/schemas/ImportKind" }
                 dryRun: { type: boolean, default: true }
                 file: { type: string, format: binary }
       responses:
-        "201": { description: Batch created, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+        "201": { description: "Batch created (status VALIDATED, APPLIED or FAILED)", content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { description: "Unreadable file, missing required columns, or more than 2,000 rows", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
 
   /v1/imports/{batchId}:
     get:
       summary: Batch status and row-level errors
-      parameters: [{ name: batchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      parameters: [{ $ref: "#/components/parameters/BatchId" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/imports/{batchId}/apply:
+    post:
+      summary: Apply a VALIDATED dry run from its stored rows (same uploader only), without uploading the file again
+      parameters: [{ $ref: "#/components/parameters/BatchId" }]
+      responses:
+        "200": { description: "APPLIED, or FAILED if data changed since the dry run", content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/imports/{batchId}/annotated:
+    get:
+      summary: The uploaded rows as .xlsx with an "erro" column and the bad rows highlighted, to fix and upload again
+      parameters: [{ $ref: "#/components/parameters/BatchId" }]
+      responses:
+        "200": { description: .xlsx file, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
 
   /v1/imports/{batchId}/rollback:
     post:
-      summary: Roll back a batch. Only while none of its events is anchored.
-      parameters: [{ name: batchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      summary: |
+        Undo an APPLIED batch. Event batches: only before rollbackAvailableUntil (imported events wait IMPORT_HOLD_MINUTES
+        before anchoring), and only if nothing recorded later builds on them. Config batches: only while the table
+        still holds exactly what the batch wrote.
+      parameters: [{ $ref: "#/components/parameters/BatchId" }]
       responses:
         "200": { description: Rolled back, content: { application/json: { schema: { $ref: "#/components/schemas/ImportBatch" } } } }
-        "409": { $ref: "#/components/responses/Problem" }
+        "409": { description: "BATCH_ALREADY_ANCHORED or BATCH_HAS_DEPENDENTS", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "422": { $ref: "#/components/responses/Problem" }
 
 components:
   securitySchemes:
@@ -301,6 +339,8 @@ components:
     PlotId: { name: plotId, in: path, required: true, schema: { type: string, format: uuid } }
     CycleId: { name: cycleId, in: path, required: true, schema: { type: string, format: uuid } }
     RequestId: { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+    BatchId: { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+    ImportKind: { name: kind, in: path, required: true, schema: { $ref: "#/components/schemas/ImportKind" }, description: Case-insensitive }
 
   responses:
     Problem:
@@ -334,6 +374,7 @@ components:
             - EVENT_ID_CONFLICT
             - CORRECTION_BREAKS_STREAM
             - BATCH_ALREADY_ANCHORED
+            - BATCH_HAS_DEPENDENTS
             - LAND_ALREADY_REGISTERED
             - CYCLE_ALREADY_EXISTS
             - INTERNAL
@@ -525,6 +566,7 @@ components:
       properties:
         fileId: { type: string, format: uuid }
         sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        fileName: { type: [string, "null"], description: "Name of the first upload; imports can cite evidence by it" }
         contentType: { type: string }
         sizeBytes: { type: integer }
         url: { type: string, description: Short-lived signed URL }
@@ -621,17 +663,39 @@ components:
               fromDay: { type: integer, description: Days relative to planting start; negative = before planting }
               toDay: { type: integer }
 
+    ImportKind:
+      type: string
+      enum: [PLOTS, PLANTINGS, INPUT_APPLICATIONS, DELIVERIES, PLANTING_WINDOWS, DISCOUNT_TABLES]
+
     ImportBatch:
       type: object
-      required: [id, kind, dryRun, status, totalRows, acceptedRows, rejectedRows, errors]
+      required: [id, kind, dryRun, status, source, provenance, fileName, format, totalRows, acceptedRows, unchangedRows, rejectedRows, eventCount, errors, createdBy, createdAt, appliedAt, rollbackAvailableUntil, rolledBackAt]
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string }
+        kind: { $ref: "#/components/schemas/ImportKind" }
         dryRun: { type: boolean }
-        status: { type: string, enum: [VALIDATED, APPLIED, ROLLED_BACK, FAILED] }
+        status: { type: string, enum: [VALIDATED, APPLIED, ROLLED_BACK, FAILED], description: "VALIDATED = dry run with no errors; FAILED = at least one row error, nothing written" }
+        source: { type: string, description: SPREADSHEET today; integrations later }
+        provenance: { type: string, enum: [MANUAL, IMPORTED, VERIFIED] }
+        fileName: { type: [string, "null"] }
+        format: { type: string, enum: [CSV, XLSX] }
         totalRows: { type: integer }
-        acceptedRows: { type: integer }
+        acceptedRows: { type: integer, description: Rows that write something }
+        unchangedRows: { type: integer, description: Rows already recorded exactly as in the file (re-upload) }
         rejectedRows: { type: integer }
+        eventCount: { type: integer, description: Events written (0 unless APPLIED) }
         errors:
           type: array
-          items: { type: object, required: [row, message], properties: { row: { type: integer }, column: { type: string }, message: { type: string } } }
+          items:
+            type: object
+            required: [row, message]
+            properties:
+              row: { type: integer, description: Spreadsheet row number (header = 1) }
+              column: { type: string, description: Header as written in the template }
+              code: { type: string, description: Problem code when a business rule rejected the row }
+              message: { type: string, description: pt-BR }
+        createdBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        appliedAt: { type: [string, "null"], format: date-time }
+        rollbackAvailableUntil: { type: [string, "null"], format: date-time, description: "Event batches only; null for config batches (no deadline) and unapplied batches" }
+        rolledBackAt: { type: [string, "null"], format: date-time }

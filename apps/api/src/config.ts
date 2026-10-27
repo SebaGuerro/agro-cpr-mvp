@@ -26,6 +26,8 @@ const Env = z
       .regex(/^0x[0-9a-fA-F]{40}$/)
       .optional(),
     DELIVERY_TOLERANCE_BPS: z.coerce.number().int().min(0).max(10_000).default(200),
+    // Imported events wait this long before anchoring; it is the window to roll a batch back.
+    IMPORT_HOLD_MINUTES: z.coerce.number().int().min(2).max(24 * 60).default(30),
     CORS_ORIGINS: z.string().default("http://localhost:3000"),
     RUN_WORKER: z
       .enum(["true", "false"])

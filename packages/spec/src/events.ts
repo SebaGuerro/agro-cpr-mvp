@@ -409,8 +409,18 @@ export const Anchor = z.object({
 export const StoredEvent = z.intersection(CanonicalEvent, RecordMeta);
 export type StoredEvent = z.infer<typeof StoredEvent>;
 
+// MANUAL: typed in the app. IMPORTED: from an uploaded file (importBatchId set).
+// VERIFIED: read from a system of record; reserved for future integrations.
+export const Provenance = z.enum(["MANUAL", "IMPORTED", "VERIFIED"]);
+
 export const EventRecord = z.intersection(
   StoredEvent,
-  z.object({ anchor: Anchor, voided: z.boolean(), correctedBy: z.array(Uuid) }),
+  z.object({
+    anchor: Anchor,
+    voided: z.boolean(),
+    correctedBy: z.array(Uuid),
+    provenance: Provenance,
+    importBatchId: Uuid.nullable(),
+  }),
 );
 export type EventRecord = z.infer<typeof EventRecord>;
