@@ -12,9 +12,29 @@ import {
 } from "../services/configs.js";
 import { approveCprRequest, createCprRequest, createCropCycle, linkInsurer } from "../services/cycles.js";
 import { recordEvent } from "../services/events.js";
+import { importId } from "../ingestion/source.js";
 
 /** Deterministic UUIDs so tests, docs and dev tokens can refer to seed data. */
 export const seedId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+/**
+ * Ids of the seeded land, events and claim for one seed run. The default run uses the
+ * fixed seedId values that tests and docs refer to. A named run (a demo reset) gets fresh
+ * ids, because on Base Sepolia the previous run's plots, CPR tokens and events are already
+ * anchored and can't be recorded again. Orgs and users always keep their fixed ids, so
+ * logins and memberships survive a reset.
+ */
+export function seedIds(run = "") {
+  const id = run ? (n: number) => importId("seed-run", run, String(n)) : seedId;
+  return {
+    id,
+    farms: { boaVista: id(301), santaRita: id(302) },
+    plots: { mt1: id(401), mt2: id(402), pr1: id(403) },
+    claims: { mtDrought: id(801) },
+  };
+}
+
+const FIXED = seedIds();
 
 export const SEED = {
   orgs: {
@@ -35,9 +55,9 @@ export const SEED = {
     financier: seedId(206),
     insurer: seedId(207),
   },
-  farms: { boaVista: seedId(301), santaRita: seedId(302) },
-  plots: { mt1: seedId(401), mt2: seedId(402), pr1: seedId(403) },
-  claims: { mtDrought: seedId(801) },
+  farms: FIXED.farms,
+  plots: FIXED.plots,
+  claims: FIXED.claims,
   checklistItems: {
     seedTreatment: seedId(911),
     preEmergence: seedId(912),
@@ -66,9 +86,10 @@ const BUYER = actor("buyer", "BUYER", "buyer");
 const FINANCIER = actor("financier", "FINANCIER", "financier");
 const INSURER = actor("insurer", "INSURER", "insurer");
 
-export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: number }): Promise<SeedResult> {
+export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: number; run?: string }): Promise<SeedResult> {
+  const S = seedIds(opts.run);
   let nextEvent = 1001;
-  const eventId = () => seedId(nextEvent++);
+  const eventId = () => S.id(nextEvent++);
   // Loosely typed on purpose: recordEvent validates every seed event against the canonical schema.
   const record = async (who: Actor, event: { eventType: CanonicalEvent["eventType"]; subjectType: "PLOT" | "CROP_CYCLE"; subjectId: string; [field: string]: unknown }) => {
     const id = eventId();
@@ -90,7 +111,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
     { id: SEED.orgs.buyer, name: "Trading Grão Forte", kind: "BUYER" },
     { id: SEED.orgs.financier, name: "Securitizadora Campo", kind: "FINANCIER" },
     { id: SEED.orgs.insurer, name: "Seguradora Safra Segura", kind: "INSURER" },
-  ]);
+  ]).onConflictDoNothing();
   await db.insert(memberships).values([
     { userId: SEED.users.admin, orgId: SEED.orgs.platform, role: "ADMIN", email: "admin@example.com", name: "Admin" },
     { userId: SEED.users.producerMT, orgId: SEED.orgs.producerMT, role: "PRODUCER", email: "boavista@example.com", name: "Produtor MT" },
@@ -99,7 +120,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
     { userId: SEED.users.buyer, orgId: SEED.orgs.buyer, role: "BUYER", email: "trading@example.com", name: "Comprador" },
     { userId: SEED.users.financier, orgId: SEED.orgs.financier, role: "FINANCIER", email: "securitizadora@example.com", name: "Financiador" },
     { userId: SEED.users.insurer, orgId: SEED.orgs.insurer, role: "INSURER", email: "seguradora@example.com", name: "Seguradora" },
-  ]);
+  ]).onConflictDoNothing();
 
   // ---- configuration (all values are SAMPLES, not official ZARC or classification tables) ----
   await replacePlantingWindows(db, [
@@ -140,12 +161,12 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
       storagePath: `seed/${label}.pdf`,
       uploadedBy: SEED.users.admin,
     })),
-  );
+  ).onConflictDoNothing();
 
   // ---- farms and plots ----
   await db.insert(farms).values([
-    { id: SEED.farms.boaVista, producerOrgId: SEED.orgs.producerMT, name: "Fazenda Boa Vista", uf: "MT", municipalityIbge: "5107925" },
-    { id: SEED.farms.santaRita, producerOrgId: SEED.orgs.producerPR, name: "Sítio Santa Rita", uf: "PR", municipalityIbge: "4104808" },
+    { id: S.farms.boaVista, producerOrgId: SEED.orgs.producerMT, name: "Fazenda Boa Vista", uf: "MT", municipalityIbge: "5107925" },
+    { id: S.farms.santaRita, producerOrgId: SEED.orgs.producerPR, name: "Sítio Santa Rita", uf: "PR", municipalityIbge: "4104808" },
   ]);
   const plot = (who: Actor, plotId: string, farmId: string, name: string, areaM2: number, uf: "MT" | "PR", ibge: string, car: string) =>
     record(who, {
@@ -157,13 +178,13 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
       unit: "M2",
       payload: { farmId, name, carCode: car, municipalityIbge: ibge, uf, geometry: null, digitalTwinRef: null },
     });
-  await plot(PRODUCER_MT, SEED.plots.mt1, SEED.farms.boaVista, "Talhão 1", 5_000_000, "MT", "5107925", "MT-5107925-SAMPLE-0001");
-  await plot(PRODUCER_MT, SEED.plots.mt2, SEED.farms.boaVista, "Talhão 2", 3_000_000, "MT", "5107925", "MT-5107925-SAMPLE-0001");
-  await plot(PRODUCER_PR, SEED.plots.pr1, SEED.farms.santaRita, "Talhão Norte", 1_200_000, "PR", "4104808", "PR-4104808-SAMPLE-0002");
+  await plot(PRODUCER_MT, S.plots.mt1, S.farms.boaVista, "Talhão 1", 5_000_000, "MT", "5107925", "MT-5107925-SAMPLE-0001");
+  await plot(PRODUCER_MT, S.plots.mt2, S.farms.boaVista, "Talhão 2", 3_000_000, "MT", "5107925", "MT-5107925-SAMPLE-0001");
+  await plot(PRODUCER_PR, S.plots.pr1, S.farms.santaRita, "Talhão Norte", 1_200_000, "PR", "4104808", "PR-4104808-SAMPLE-0002");
   await record(PRODUCER_MT, {
     eventType: "SOIL_ANALYSIS_ATTACHED",
     subjectType: "PLOT",
-    subjectId: SEED.plots.mt1,
+    subjectId: S.plots.mt1,
     occurredAt: "2026-07-15T10:00:00-03:00",
     quantity: null,
     unit: null,
@@ -172,7 +193,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
   });
 
   // ---- cycle 1: PR soybean 2025/26, short delivery ----
-  const c1 = await createCropCycle(db, PRODUCER_PR, { plotId: SEED.plots.pr1, crop: "SOJA", seasonCode: "2025/26-SAFRA", expectedYieldKgPerHa: 3_600 }, opts.now);
+  const c1 = await createCropCycle(db, PRODUCER_PR, { plotId: S.plots.pr1, crop: "SOJA", seasonCode: "2025/26-SAFRA", expectedYieldKgPerHa: 3_600 }, opts.now);
   const req1 = await createCprRequest(
     db,
     PRODUCER_PR,
@@ -217,10 +238,10 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
   await record(PRODUCER_PR, { ...cyc1, eventType: "HARVEST_STARTED", occurredAt: "2026-02-03T08:00:00-03:00", quantity: null, unit: null, payload: { startedOn: "2026-02-03" } });
 
   const trucks = [
-    { delivery: seedId(701), plate: "ABC1D23", day: "2026-02-04", gross: 37_000, moisture: 15.0, impurity: 1.0, damaged: 2.0, discount: 555, ticket: "T-1001" },
-    { delivery: seedId(702), plate: "QRT4E56", day: "2026-02-06", gross: 36_500, moisture: 14.0, impurity: 1.5, damaged: 1.0, discount: 183, ticket: "T-1002" },
+    { delivery: S.id(701), plate: "ABC1D23", day: "2026-02-04", gross: 37_000, moisture: 15.0, impurity: 1.0, damaged: 2.0, discount: 555, ticket: "T-1001" },
+    { delivery: S.id(702), plate: "QRT4E56", day: "2026-02-06", gross: 36_500, moisture: 14.0, impurity: 1.5, damaged: 1.0, discount: 183, ticket: "T-1002" },
     // The table gives 1,056 kg; the ticket discounts 1,200 kg, which raises QUALITY_TICKET_MISMATCH.
-    { delivery: seedId(703), plate: "MNO7P89", day: "2026-02-09", gross: 33_000, moisture: 16.0, impurity: 1.2, damaged: 3.0, discount: 1_200, ticket: "T-1003" },
+    { delivery: S.id(703), plate: "MNO7P89", day: "2026-02-09", gross: 33_000, moisture: 16.0, impurity: 1.2, damaged: 3.0, discount: 1_200, ticket: "T-1003" },
   ];
   for (const t of trucks) {
     await record(PRODUCER_PR, { ...cyc1, eventType: "TRUCK_DISPATCHED", occurredAt: `${t.day}T07:00:00-03:00`, quantity: t.gross, unit: "KG", payload: { deliveryId: t.delivery, truckPlate: t.plate, warehouseOrgId: SEED.orgs.warehouse, expectedArrivalAt: `${t.day}T13:00:00-03:00` } });
@@ -233,7 +254,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
   await record(WAREHOUSE, { ...cyc1, eventType: "GRAIN_RELEASED", occurredAt: "2026-03-15T09:00:00-03:00", quantity: 60_000, unit: "KG", payload: { cdaNumber: "CDA-2026-0001", releasedToOrgId: SEED.orgs.buyer, releaseOrderNumber: "OR-2026-010" } });
 
   // ---- cycle 2: MT soybean 2026/27, planted before the window ----
-  const c2 = await createCropCycle(db, PRODUCER_MT, { plotId: SEED.plots.mt1, crop: "SOJA", seasonCode: "2026/27-SAFRA", expectedYieldKgPerHa: 3_600 }, opts.now);
+  const c2 = await createCropCycle(db, PRODUCER_MT, { plotId: S.plots.mt1, crop: "SOJA", seasonCode: "2026/27-SAFRA", expectedYieldKgPerHa: 3_600 }, opts.now);
   const req2 = await createCprRequest(
     db,
     PRODUCER_MT,
@@ -264,7 +285,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
   // Insured by the producer's choice of insurer; a drought claim is still open.
   await linkInsurer(db, PRODUCER_MT, c2.id, SEED.orgs.insurer, opts.now);
   await record(INSURER, { ...cyc2, eventType: "POLICY_ISSUED", occurredAt: "2026-08-28T10:00:00-03:00", quantity: 150_000_000, unit: "BRL_CENTS", payload: { insurerOrgId: SEED.orgs.insurer, policyNumber: "APL-2026-7781", coverage: "MULTIRRISCO", insuredKg: 1_000_000, premiumBrlCents: 6_000_000, startsOn: "2026-09-01", endsOn: "2027-04-30" } });
-  await record(PRODUCER_MT, { ...cyc2, eventType: "CLAIM_FILED", occurredAt: "2026-10-12T09:00:00-03:00", quantity: 150_000, unit: "KG", payload: { claimId: SEED.claims.mtDrought, policyNumber: "APL-2026-7781", cause: "SECA", lossOn: "2026-10-10", description: "Estiagem de 25 dias após a emergência; falhas de estande no talhão." } });
+  await record(PRODUCER_MT, { ...cyc2, eventType: "CLAIM_FILED", occurredAt: "2026-10-12T09:00:00-03:00", quantity: 150_000, unit: "KG", payload: { claimId: S.claims.mtDrought, policyNumber: "APL-2026-7781", cause: "SECA", lossOn: "2026-10-10", description: "Estiagem de 25 dias após a emergência; falhas de estande no talhão." } });
 
   await syncCycleAlerts(db, "all", opts);
   return { shortfallCycleId: c1.id, outsideWindowCycleId: c2.id, eventIds: { fungicideOriginal, fungicideCorrection } };

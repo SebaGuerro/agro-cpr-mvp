@@ -4,3 +4,5 @@ node_modules/
 .env.*
 !.env.example
 dist/
+test-results/
+playwright-report/

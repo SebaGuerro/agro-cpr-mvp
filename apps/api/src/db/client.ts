@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
@@ -25,6 +27,8 @@ const migrationsFolder = new URL("../../drizzle", import.meta.url).pathname.repl
 export function createDb(url: string): DbHandle {
   if (url.startsWith("pglite:")) {
     const target = url.slice("pglite:".length);
+    // PGlite creates its own folder but not missing parents (e.g. ./.data on a fresh checkout).
+    if (target !== "memory") mkdirSync(dirname(target), { recursive: true });
     const client = target === "memory" ? new PGlite() : new PGlite(target);
     const db = drizzlePglite({ client, schema });
     return {

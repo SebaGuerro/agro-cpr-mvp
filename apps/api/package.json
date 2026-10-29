@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/seed/run.ts"
+    "seed": "tsx src/seed/run.ts",
+    "demo:reset": "tsx src/demo/reset.ts"
   },
   "dependencies": {
     "@agro-cpr/spec": "0.1.0",

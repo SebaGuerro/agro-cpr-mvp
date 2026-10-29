@@ -2,10 +2,10 @@
 
 The domain API, rules engine, risk scoring, alerts, the CSV and Excel imports (see [`src/ingestion/README.md`](src/ingestion/README.md)), and the relayer that anchors events on AgroLedger. It implements [`openapi.yaml`](../../packages/spec/openapi/openapi.yaml).
 
-**Status:** typechecks, and 70 tests pass:
+**Status:** typechecks, and 72 tests pass:
 - 20 rule tests
 - 8 parsing tests
-- 42 integration tests that run the real app against an embedded Postgres loaded with the seed scenario (21 for the API, 21 for imports)
+- 44 integration tests that run the real app against an embedded Postgres loaded with the seed scenario (22 for the API, 21 for imports, 1 for the demo reset)
 
 A local smoke run (migrate, seed, start, authenticated reads) works. **Not yet tested:** a real Supabase project, a real Base Sepolia contract through the viem adapter, pg-boss on real Postgres, and the Docker image and Fly deploy.
 
@@ -96,6 +96,10 @@ Every rule that fires produces one finding. Findings feed both the risk grade an
 | Harvest and delivery | 0.3 | shortfall after the delivery window 60, harvest overdue 30, truck overdue 25 each, harvest without plan 20, ticket discount mismatch 10 each |
 
 Each dimension caps at 100. Score = max(weighted average, 0.8 × worst dimension), so one severe problem can't be averaged away. Grades: A < 15, B < 35, C < 60, D ≥ 60. The weights are in `RISK_WEIGHTS` (`src/domain/findings.ts`).
+
+## Demo reset
+
+`node scripts/dev-run.mjs reset [envfile]` (or `npm run demo:reset` at the root, which uses `apps/api/.env.local`) removes every farm, plot, cycle, event, alert and import, then seeds again. Organizations and users are kept. On a real chain each reset seeds with fresh ids, because the previous run is already anchored. A test proves two runs anchor side by side on one chain and still reconcile.
 
 ## Seed scenario
 
