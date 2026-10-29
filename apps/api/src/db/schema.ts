@@ -8,6 +8,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -21,7 +22,7 @@ const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" 
 const createdAt = () => ts("created_at").notNull().defaultNow();
 const kg = (name: string) => bigint(name, { mode: "number" });
 
-export const ORG_KINDS = ["PLATFORM", "PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER"] as const;
+export const ORG_KINDS = ["PLATFORM", "PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER", "INSURER"] as const;
 export const CROPS = ["SOJA", "MILHO", "TRIGO", "SORGO", "FEIJAO"] as const;
 
 export const orgs = pgTable("orgs", {
@@ -128,6 +129,22 @@ export const cprRequests = pgTable(
     decidedAt: ts("decided_at"),
   },
   (t) => [index("cpr_requests_cycle_idx").on(t.cropCycleId)],
+);
+
+// The producer links an insurer to a cycle; the insurer then sees it and can issue a policy.
+export const cycleInsurers = pgTable(
+  "cycle_insurers",
+  {
+    cropCycleId: uuid("crop_cycle_id")
+      .notNull()
+      .references(() => cropCycles.id),
+    insurerOrgId: uuid("insurer_org_id")
+      .notNull()
+      .references(() => orgs.id),
+    linkedBy: uuid("linked_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.cropCycleId, t.insurerOrgId] }), index("cycle_insurers_org_idx").on(t.insurerOrgId)],
 );
 
 export const ANCHOR_STATUSES = ["PENDING", "ANCHORED", "FAILED"] as const;

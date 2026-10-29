@@ -1,9 +1,9 @@
 import { Uf } from "@agro-cpr/spec";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { actorOf, parse, type AppDeps } from "../app.js";
-import { farms, orgs } from "../db/schema.js";
+import { farms, ORG_KINDS, orgs } from "../db/schema.js";
 import { fail } from "../domain/errors.js";
 import { getVisiblePlot, plotViews, subjectEventViews, visibleFarms, visiblePlots } from "../services/views.js";
 
@@ -24,6 +24,14 @@ export const coreRoutes =
       const actor = actorOf(req);
       const [org] = await db.select().from(orgs).where(eq(orgs.id, actor.orgId));
       return { userId: actor.userId, orgId: actor.orgId, orgName: org?.name ?? "", role: actor.role };
+    });
+
+    // Names and kinds only (no tax ids), for pickers such as warehouse, financier and insurer.
+    app.get("/v1/orgs", async (req) => {
+      actorOf(req);
+      const { kind } = parse(z.object({ kind: z.enum(ORG_KINDS).optional() }), req.query);
+      const rows = await db.select({ id: orgs.id, name: orgs.name, kind: orgs.kind }).from(orgs).orderBy(asc(orgs.name));
+      return rows.filter((o) => !kind || o.kind === kind);
     });
 
     app.get("/v1/farms", async (req) => {

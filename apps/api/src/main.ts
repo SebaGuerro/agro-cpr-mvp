@@ -1,4 +1,4 @@
-import { devVerifier, supabaseVerifier } from "./auth.js";
+import { devInviter, devVerifier, supabaseInviter, supabaseVerifier } from "./auth.js";
 import { buildApp } from "./app.js";
 import { LedgerKeys, type ChainAdapter } from "./chain/ledger.js";
 import { createMockChain } from "./chain/mock.js";
@@ -52,6 +52,12 @@ const app = await buildApp({
   corsOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()),
   onEventRecorded: () => jobs?.triggerAnchor(),
   importHoldMs,
+  inviteUser:
+    env.AUTH_MODE === "dev"
+      ? devInviter
+      : env.SUPABASE_SERVICE_ROLE_KEY
+        ? supabaseInviter(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY)
+        : undefined,
   logger: true,
 });
 

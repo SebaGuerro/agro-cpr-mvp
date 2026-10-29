@@ -4,7 +4,7 @@ This package is the single contract between the three layers. Contracts (A), bac
 
 | File | What it is | Used by |
 |---|---|---|
-| `src/events.ts` | Zod schemas for all 18 canonical events, roles, units, on-chain codes, emitter matrix | B, C, import |
+| `src/events.ts` | Zod schemas for all 21 canonical events, roles, units, on-chain codes, emitter matrix | B, C, import |
 | `src/keys.ts` | On-chain key derivation (HMAC), event-id encoding, canonical JSON and `recordHash` (server only) | A, B |
 | `contracts/IAgroLedger.sol` | Smart contract interface | A, B |
 | `openapi/openapi.yaml` | REST API skeleton (OpenAPI 3.1) | B, C |
@@ -65,6 +65,9 @@ Tooling for each layer (Foundry vs Hardhat, hosting, UI kit) is decided before t
 | 16 | CPR_SETTLED | CROP_CYCLE | delivered KG | optional | FINANCIER, ADMIN |
 | 17 | EVENT_CORRECTED | either | none | optional | original org, ADMIN |
 | 18 | EVENT_VOIDED | either | none | optional | ADMIN |
+| 19 | POLICY_ISSUED | CROP_CYCLE | insured BRL_CENTS | optional | INSURER, ADMIN |
+| 20 | CLAIM_FILED | CROP_CYCLE | estimated loss KG | optional | PRODUCER, ADMIN |
+| 21 | CLAIM_SETTLED | CROP_CYCLE | indemnity BRL_CENTS (0 if denied) | optional | INSURER, ADMIN |
 
 Codes are permanent: never renumber, only append.
 
@@ -114,13 +117,18 @@ stateDiagram-v2
 | SALE_RECORDED | ≥ 1 receipt; Σ sold ≤ Σ net received | none |
 | INFO_REQUESTED | any time | opens `INFO_REQUEST_OPEN` alert |
 | CPR_SETTLED | CPR ISSUED or FUNDED; FULLY_DELIVERED needs DELIVERED; partial cash settlement from DELIVERING | CPR → SETTLED, stage → CLOSED |
+| POLICY_ISSUED | the insurer is linked to the cycle; policy number unique per cycle; ends after it starts | adds a policy |
+| CLAIM_FILED | an active policy with that number; once per `claimId` | opens `CLAIM_OPEN` alert |
+| CLAIM_SETTLED | its claim filed and not yet settled; by the policy's insurer; DENIED pays 0 | closes the claim |
 | EVENT_CORRECTED / VOIDED | any time; must survive replay | recompute everything |
 
-After CLOSED, only `INFO_REQUESTED`, `EVENT_CORRECTED` and `EVENT_VOIDED` are accepted.
+After CLOSED, only `INFO_REQUESTED`, the insurance events, `EVENT_CORRECTED` and `EVENT_VOIDED` are accepted (a claim can outlive the CPR).
 
 Plot subject: `PLOT_REGISTERED` once, then `SOIL_ANALYSIS_ATTACHED` any number of times.
 
 ## Who can read what
+
+Insurance (added after the first release): the producer links an insurer to a crop cycle, the same way a CPR request links a financier. Policies never change the risk grade; they are shown next to it.
 
 | Role | Sees |
 |---|---|
@@ -128,6 +136,7 @@ Plot subject: `PLOT_REGISTERED` once, then `SOIL_ANALYSIS_ATTACHED` any number o
 | WAREHOUSE | Cycles whose CPR designates it: delivery, quality, CDA events, plus CPR volume and dates |
 | BUYER | Cycles where it has a release or sale: volumes, quality and those events |
 | FINANCIER | Cycles with a CPR request or CPR addressed to it: everything, including plot and soil data |
+| INSURER | Cycles whose producer linked it (`POST /v1/crop-cycles/{id}/insurers`): everything, like a financier |
 | ADMIN | Everything |
 
 ## Notes for Prompt 1 (contracts)

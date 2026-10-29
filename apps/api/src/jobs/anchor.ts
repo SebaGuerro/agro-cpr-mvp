@@ -120,7 +120,7 @@ export async function anchorPending(
             cropCycleId: row.subjectType === "CROP_CYCLE" ? row.subjectId : null,
             subjectId: row.subjectId,
             eventId: row.id,
-            message: `${row.eventType} could not be anchored after ${attempts} attempts: ${message.slice(0, 300)}`,
+            message: `${row.eventType} não foi registrado na blockchain após ${attempts} tentativas: ${message.slice(0, 300)}`,
           },
           opts.now(),
         );
@@ -172,7 +172,7 @@ export async function reconcileAnchors(
           cropCycleId: expected.subjectType === "CROP_CYCLE" ? subjectId : null,
           subjectId,
           eventId: null,
-          message: `On-chain history differs from the database (chain seq ${actual.seq}, database ${expected.seq})`,
+          message: `O histórico na blockchain difere do banco de dados (blockchain: ${actual.seq} registros, banco: ${expected.seq})`,
         },
         opts.now(),
       );

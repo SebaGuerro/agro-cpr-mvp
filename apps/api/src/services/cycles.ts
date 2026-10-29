@@ -2,7 +2,7 @@ import { CanonicalEvent, SeasonCode } from "@agro-cpr/spec";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
-import { cprRequests, cropCycles, CROPS, orgs, plots } from "../db/schema.js";
+import { cprRequests, cropCycles, CROPS, cycleInsurers, orgs, plots } from "../db/schema.js";
 import { initialCycleState } from "../domain/cycleState.js";
 import { fail } from "../domain/errors.js";
 import { eligibleKg, potentialKg } from "../domain/quantities.js";
@@ -177,4 +177,27 @@ export async function rejectCprRequest(db: Db, actor: Actor, requestId: string, 
       .returning();
     return updated!;
   });
+}
+
+export async function linkedInsurers(db: Db, cycleId: string) {
+  return db
+    .select({ id: orgs.id, name: orgs.name, kind: orgs.kind })
+    .from(cycleInsurers)
+    .innerJoin(orgs, eq(orgs.id, cycleInsurers.insurerOrgId))
+    .where(eq(cycleInsurers.cropCycleId, cycleId));
+}
+
+/** The producer lets an insurer see the cycle and issue a policy on it. Idempotent. */
+export async function linkInsurer(db: Db, actor: Actor, cycleId: string, insurerOrgId: string, now: Date) {
+  const [cycle] = await db.select().from(cropCycles).where(eq(cropCycles.id, cycleId));
+  if (!cycle) fail("NOT_FOUND", "Crop cycle not found");
+  requireProducerOf(actor, cycle.producerOrgId);
+  const [org] = await db.select().from(orgs).where(eq(orgs.id, insurerOrgId));
+  if (org?.kind !== "INSURER") fail("VALIDATION_FAILED", "insurerOrgId is not an insurer");
+  const inserted = await db
+    .insert(cycleInsurers)
+    .values({ cropCycleId: cycleId, insurerOrgId, linkedBy: actor.userId, createdAt: now })
+    .onConflictDoNothing()
+    .returning();
+  return { created: inserted.length > 0, insurers: await linkedInsurers(db, cycleId) };
 }

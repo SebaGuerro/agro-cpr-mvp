@@ -2,7 +2,7 @@
 
 A single contract implementing [`IAgroLedger`](../packages/spec/contracts/IAgroLedger.sol): a soulbound ERC-721 per CPR plus an append-only event log with a hash chain per subject.
 
-**Status:** builds with Foundry 1.8.6 (solc 0.8.24, via-IR) and all 22 tests pass, including 1,000 fuzz runs of the volume cap. Not yet deployed. `forge build` prints lint warnings for reverts inside the batch loop (intended: batches are all-or-nothing) and for the `block.timestamp` comparison (intended: a loose 1-hour clock-skew guard).
+**Status:** builds with Foundry 1.8.6 (solc 0.8.24, via-IR) and all 23 tests pass, including 1,000 fuzz runs of the volume cap. Not yet deployed. `forge build` prints lint warnings for reverts inside the batch loop (intended: batches are all-or-nothing) and for the `block.timestamp` comparison (intended: a loose 1-hour clock-skew guard).
 
 ## Locked choices for this block
 

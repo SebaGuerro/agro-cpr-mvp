@@ -2,10 +2,12 @@
 
 The domain API, rules engine, risk scoring, alerts, the CSV and Excel imports (see [`src/ingestion/README.md`](src/ingestion/README.md)), and the relayer that anchors events on AgroLedger. It implements [`openapi.yaml`](../../packages/spec/openapi/openapi.yaml).
 
-**Status:** typechecks, and 63 tests pass:
-- 16 rule tests
+**Status:** typechecks, and 70 tests pass:
+- 20 rule tests
 - 8 parsing tests
-- 39 integration tests that run the real app against an embedded Postgres loaded with the seed scenario (18 for the API, 21 for imports) A local smoke run (migrate, seed, start, authenticated reads) works. **Not yet tested:** a real Supabase project, a real Base Sepolia contract through the viem adapter, pg-boss on real Postgres, and the Docker image and Fly deploy.
+- 42 integration tests that run the real app against an embedded Postgres loaded with the seed scenario (21 for the API, 21 for imports)
+
+A local smoke run (migrate, seed, start, authenticated reads) works. **Not yet tested:** a real Supabase project, a real Base Sepolia contract through the viem adapter, pg-boss on real Postgres, and the Docker image and Fly deploy.
 
 ## Locked choices
 
@@ -69,6 +71,20 @@ The client generates the event `id`. Resending the same event returns `200` with
 - **Imported events wait `IMPORT_HOLD_MINUTES` (default 30)** before anchoring, and so does anything recorded after them on the same subject. That wait is the rollback window for a wrong file.
 - **Batching:** one transaction per event is enough for the pilot (about 2 s each on Base). If CSV imports make this slow, switch the worker to `recordEvents` in batches of 50.
 
+## Admin and the front-end
+
+- `GET /v1/orgs` lists organizations (id, name, kind) for pickers.
+- `GET/POST /v1/admin/orgs` and `GET/POST /v1/admin/users` (ADMIN) create organizations and invite users. Supabase sends the invitation (needs `SUPABASE_SERVICE_ROLE_KEY`). In `AUTH_MODE=dev` the user gets a random id and signs in with `dev:<id>`. A user's role follows their organization's kind.
+- Finding and alert messages are in Portuguese with Brazilian date and number formats, because the screens show them as written. Codes stay in English.
+
+## Insurance
+
+- The producer links an insurer to a crop cycle (`POST /v1/crop-cycles/{id}/insurers`). The insurer then sees that cycle, like a financier with a CPR request.
+- The insurer records `POLICY_ISSUED`, the producer `CLAIM_FILED`, and the policy's insurer `CLAIM_SETTLED` (paid or denied).
+- An open claim raises a HIGH `CLAIM_OPEN` alert; after 30 days without an answer, also `CLAIM_UNANSWERED`.
+- Policies and claims never change the risk grade; the cycle view shows them under `insurance`.
+- Insurance events are accepted after the CPR is settled, because a claim can outlive it.
+
 ## Risk grade
 
 Every rule that fires produces one finding. Findings feed both the risk grade and the alerts, so the reasons shown always match the alerts raised.
@@ -86,7 +102,7 @@ Each dimension caps at 100. Score = max(weighted average, 0.8 × worst dimension
 | Cycle | What it shows |
 |---|---|
 | PR soybean 2025/26 (Sítio Santa Rita) | CPR of 108 t, 3 trucks delivering 104.6 t net (96.8%, under the 98% tolerance), one fungicide date corrected, one quality ticket that disagrees with the discount table, a sale and a release. Not settled, so it shows a shortfall and an overdue CPR. Grade C |
-| MT soybean 2026/27 (Fazenda Boa Vista) | CPR of 1,000 t, planted 5 to 12 September before the sample window opens (16 September), pre-emergence herbicide missing, an open info request from the financier. Grade D |
+| MT soybean 2026/27 (Fazenda Boa Vista) | CPR of 1,000 t, planted 5 to 12 September before the sample window opens (16 September), pre-emergence herbicide missing, an open info request from the financier. Insured by Seguradora Safra Segura (multi-peril policy) with an open drought claim. Grade D |
 
 All planting windows, discount tables and checklists in the seed are **samples**, marked `isSample`. Replace them with official ZARC data and your classification tables before real use.
 

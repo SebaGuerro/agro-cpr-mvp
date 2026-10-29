@@ -10,7 +10,7 @@ import {
   replaceHaircuts,
   replacePlantingWindows,
 } from "../services/configs.js";
-import { approveCprRequest, createCprRequest, createCropCycle } from "../services/cycles.js";
+import { approveCprRequest, createCprRequest, createCropCycle, linkInsurer } from "../services/cycles.js";
 import { recordEvent } from "../services/events.js";
 
 /** Deterministic UUIDs so tests, docs and dev tokens can refer to seed data. */
@@ -24,6 +24,7 @@ export const SEED = {
     warehouse: seedId(104),
     buyer: seedId(105),
     financier: seedId(106),
+    insurer: seedId(107),
   },
   users: {
     admin: seedId(201),
@@ -32,9 +33,11 @@ export const SEED = {
     warehouse: seedId(204),
     buyer: seedId(205),
     financier: seedId(206),
+    insurer: seedId(207),
   },
   farms: { boaVista: seedId(301), santaRita: seedId(302) },
   plots: { mt1: seedId(401), mt2: seedId(402), pr1: seedId(403) },
+  claims: { mtDrought: seedId(801) },
   checklistItems: {
     seedTreatment: seedId(911),
     preEmergence: seedId(912),
@@ -46,7 +49,7 @@ export const SEED = {
 export interface SeedResult {
   /** 2025/26 soybean in PR: delivered short over 3 trucks, one corrected application, one ticket mismatch. Not settled. */
   shortfallCycleId: string;
-  /** 2026/27 soybean in MT: planted before the window opened, one application missing, info requested. */
+  /** 2026/27 soybean in MT: planted before the window opened, one application missing, info requested, insured, open drought claim. */
   outsideWindowCycleId: string;
   eventIds: { fungicideOriginal: string; fungicideCorrection: string };
 }
@@ -61,6 +64,7 @@ const PRODUCER_PR = actor("producerPR", "PRODUCER", "producerPR");
 const WAREHOUSE = actor("warehouse", "WAREHOUSE", "warehouse");
 const BUYER = actor("buyer", "BUYER", "buyer");
 const FINANCIER = actor("financier", "FINANCIER", "financier");
+const INSURER = actor("insurer", "INSURER", "insurer");
 
 export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: number }): Promise<SeedResult> {
   let nextEvent = 1001;
@@ -85,6 +89,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
     { id: SEED.orgs.warehouse, name: "Armazém Central", kind: "WAREHOUSE" },
     { id: SEED.orgs.buyer, name: "Trading Grão Forte", kind: "BUYER" },
     { id: SEED.orgs.financier, name: "Securitizadora Campo", kind: "FINANCIER" },
+    { id: SEED.orgs.insurer, name: "Seguradora Safra Segura", kind: "INSURER" },
   ]);
   await db.insert(memberships).values([
     { userId: SEED.users.admin, orgId: SEED.orgs.platform, role: "ADMIN", email: "admin@example.com", name: "Admin" },
@@ -93,6 +98,7 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
     { userId: SEED.users.warehouse, orgId: SEED.orgs.warehouse, role: "WAREHOUSE", email: "armazem@example.com", name: "Armazém" },
     { userId: SEED.users.buyer, orgId: SEED.orgs.buyer, role: "BUYER", email: "trading@example.com", name: "Comprador" },
     { userId: SEED.users.financier, orgId: SEED.orgs.financier, role: "FINANCIER", email: "securitizadora@example.com", name: "Financiador" },
+    { userId: SEED.users.insurer, orgId: SEED.orgs.insurer, role: "INSURER", email: "seguradora@example.com", name: "Seguradora" },
   ]);
 
   // ---- configuration (all values are SAMPLES, not official ZARC or classification tables) ----
@@ -254,6 +260,11 @@ export async function seedScenario(db: Db, opts: { now: Date; toleranceBps: numb
   });
   await record(PRODUCER_MT, { ...cyc2, eventType: "PLANTING_RECORDED", occurredAt: "2026-09-12T18:00:00-03:00", quantity: 5_000_000, unit: "M2", payload: { crop: "SOJA", cultivar: "Cultivar exemplo 75", cycleDays: 120, startedOn: "2026-09-05", finishedOn: "2026-09-12" } });
   await record(FINANCIER, { ...cyc2, eventType: "INFO_REQUESTED", occurredAt: "2026-10-20T09:00:00-03:00", quantity: null, unit: null, payload: { requestedFromOrgId: SEED.orgs.producerMT, topic: "PLANTING", message: "Envie a nota do plantio e fotos georreferenciadas do talhão.", dueDate: "2026-11-05" } });
+
+  // Insured by the producer's choice of insurer; a drought claim is still open.
+  await linkInsurer(db, PRODUCER_MT, c2.id, SEED.orgs.insurer, opts.now);
+  await record(INSURER, { ...cyc2, eventType: "POLICY_ISSUED", occurredAt: "2026-08-28T10:00:00-03:00", quantity: 150_000_000, unit: "BRL_CENTS", payload: { insurerOrgId: SEED.orgs.insurer, policyNumber: "APL-2026-7781", coverage: "MULTIRRISCO", insuredKg: 1_000_000, premiumBrlCents: 6_000_000, startsOn: "2026-09-01", endsOn: "2027-04-30" } });
+  await record(PRODUCER_MT, { ...cyc2, eventType: "CLAIM_FILED", occurredAt: "2026-10-12T09:00:00-03:00", quantity: 150_000, unit: "KG", payload: { claimId: SEED.claims.mtDrought, policyNumber: "APL-2026-7781", cause: "SECA", lossOn: "2026-10-10", description: "Estiagem de 25 dias após a emergência; falhas de estande no talhão." } });
 
   await syncCycleAlerts(db, "all", opts);
   return { shortfallCycleId: c1.id, outsideWindowCycleId: c2.id, eventIds: { fungicideOriginal, fungicideCorrection } };

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { LedgerKeys } from "../chain/ledger.js";
 import type { Db } from "../db/client.js";
-import { cprRequests, cropCycles, events, farms, plots } from "../db/schema.js";
+import { cprRequests, cropCycles, cycleInsurers, events, farms, plots } from "../db/schema.js";
 import { fulfillment, replayPlot } from "../domain/cycleState.js";
 import { fail } from "../domain/errors.js";
 import { assessRisk, cycleFindings, type Finding, type RiskAssessment } from "../domain/findings.js";
@@ -33,6 +33,14 @@ export async function visibleCycles(db: Db, actor: Actor): Promise<CycleRow[]> {
         .where(eq(cprRequests.financierOrgId, actor.orgId));
       const ids = new Set(requested.map((r) => r.cycleId));
       return all.filter((c) => ids.has(c.id) || c.state.cpr?.financierOrgId === actor.orgId);
+    }
+    case "INSURER": {
+      const linked = await db
+        .select({ cycleId: cycleInsurers.cropCycleId })
+        .from(cycleInsurers)
+        .where(eq(cycleInsurers.insurerOrgId, actor.orgId));
+      const ids = new Set(linked.map((r) => r.cycleId));
+      return all.filter((c) => ids.has(c.id));
     }
   }
 }
@@ -136,6 +144,11 @@ export function cropCycleView(c: CycleRow, risk: RiskAssessment, keys: LedgerKey
     },
     fulfillment: fulfillment(s),
     risk: { grade: risk.grade, score: risk.score },
+    insurance: {
+      policies: s.policies,
+      claims: s.claims,
+      openClaims: s.claims.filter((c) => !c.settlement).length,
+    },
   };
 }
 

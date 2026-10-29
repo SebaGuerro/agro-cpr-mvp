@@ -3,7 +3,7 @@ import { z } from "zod";
 // Canonical event contract shared by backend, front-end and import.
 // Frozen by Prompt 0: change only with the whole team's agreement.
 
-export const ROLES = ["PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER", "ADMIN"] as const;
+export const ROLES = ["PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER", "INSURER", "ADMIN"] as const;
 export const Role = z.enum(ROLES);
 export type Role = z.infer<typeof Role>;
 
@@ -26,6 +26,10 @@ export const EVENT_TYPES = [
   "CPR_SETTLED",
   "EVENT_CORRECTED",
   "EVENT_VOIDED",
+  // Appended after the first release: codes 19-21.
+  "POLICY_ISSUED",
+  "CLAIM_FILED",
+  "CLAIM_SETTLED",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -59,8 +63,11 @@ export const EMITTERS: Record<EventType, readonly Role[]> = {
   INFO_REQUESTED: ["FINANCIER", "ADMIN"],
   CPR_SETTLED: ["FINANCIER", "ADMIN"],
   // Also restricted to the org that emitted the original event (backend check).
-  EVENT_CORRECTED: ["PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER", "ADMIN"],
+  EVENT_CORRECTED: ["PRODUCER", "WAREHOUSE", "BUYER", "FINANCIER", "INSURER", "ADMIN"],
   EVENT_VOIDED: ["ADMIN"],
+  POLICY_ISSUED: ["INSURER", "ADMIN"],
+  CLAIM_FILED: ["PRODUCER", "ADMIN"],
+  CLAIM_SETTLED: ["INSURER", "ADMIN"],
 };
 
 export const CYCLE_STAGES = [
@@ -339,6 +346,55 @@ export const CprSettled = CycleEvent.extend({
   }),
 });
 
+// ---------- agricultural insurance ----------
+
+export const PolicyIssued = CycleEvent.extend({
+  eventType: z.literal("POLICY_ISSUED"),
+  quantity: IntQty, // insured amount
+  unit: z.literal("BRL_CENTS"),
+  ...evidenceOptional, // the policy document
+  ...noRef,
+  payload: z.object({
+    insurerOrgId: Uuid,
+    policyNumber: z.string().min(1).max(60),
+    // Custeio covers the financed costs; produtividade a yield floor; faturamento revenue.
+    coverage: z.enum(["CUSTEIO", "PRODUTIVIDADE", "FATURAMENTO", "MULTIRRISCO"]),
+    insuredKg: IntQty.nullable(),
+    premiumBrlCents: IntQty,
+    startsOn: IsoDate,
+    endsOn: IsoDate,
+  }),
+});
+
+export const ClaimFiled = CycleEvent.extend({
+  eventType: z.literal("CLAIM_FILED"),
+  ...kg, // estimated loss
+  ...evidenceOptional, // photos, weather report
+  ...noRef,
+  payload: z.object({
+    claimId: Uuid, // groups the filing and its settlement
+    policyNumber: z.string().min(1).max(60),
+    cause: z.enum(["SECA", "GEADA", "GRANIZO", "EXCESSO_CHUVA", "PRAGA_DOENCA", "INCENDIO", "OUTRO"]),
+    lossOn: IsoDate,
+    description: z.string().min(1).max(2000),
+  }),
+});
+
+export const ClaimSettled = CycleEvent.extend({
+  eventType: z.literal("CLAIM_SETTLED"),
+  quantity: IntQty, // indemnity paid; 0 when denied
+  unit: z.literal("BRL_CENTS"),
+  ...evidenceOptional, // the adjuster's report
+  ...noRef,
+  payload: z.object({
+    claimId: Uuid,
+    outcome: z.enum(["PAID", "DENIED"]),
+    assessedLossKg: IntQty.nullable(),
+    settledOn: IsoDate,
+    reason: z.string().max(500).nullable(),
+  }),
+});
+
 const AnySubject = Base.extend({ subjectType: z.enum(["PLOT", "CROP_CYCLE"]) });
 
 // The backend merges `corrected` into the original event, validates the result
@@ -387,6 +443,9 @@ export const CanonicalEvent = z.discriminatedUnion("eventType", [
   CprSettled,
   EventCorrected,
   EventVoided,
+  PolicyIssued,
+  ClaimFiled,
+  ClaimSettled,
 ]);
 export type CanonicalEvent = z.infer<typeof CanonicalEvent>;
 

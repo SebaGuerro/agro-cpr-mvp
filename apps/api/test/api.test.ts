@@ -29,7 +29,7 @@ beforeAll(async () => {
   handle = createDb("pglite:memory");
   await handle.migrate();
   seed = await seedScenario(handle.db, { now: NOW, toleranceBps: 200 });
-  app = await buildApp({ db: handle.db, verify: devVerifier, storage: memoryStorage(), keys, now, toleranceBps: 200, corsOrigins: ["*"] });
+  app = await buildApp({ db: handle.db, verify: devVerifier, storage: memoryStorage(), keys, now, toleranceBps: 200, corsOrigins: ["*"], inviteUser: async () => seedId(290) });
 }, 60_000);
 
 afterAll(async () => {
@@ -217,6 +217,67 @@ describe("files", () => {
   });
 });
 
+describe("insurance", () => {
+  const policy = (cycleId: string, overrides: Record<string, unknown> = {}) => ({
+    id: seedId(5200),
+    subjectType: "CROP_CYCLE",
+    subjectId: cycleId,
+    actorRole: "INSURER",
+    actorOrgId: SEED.orgs.insurer,
+    occurredAt: "2026-10-27T09:00:00-03:00",
+    eventType: "POLICY_ISSUED",
+    quantity: 20_000_000,
+    unit: "BRL_CENTS",
+    evidenceHash: null,
+    refEventId: null,
+    payload: { insurerOrgId: SEED.orgs.insurer, policyNumber: "APL-2025-0100", coverage: "CUSTEIO", insuredKg: null, premiumBrlCents: 800_000, startsOn: "2025-10-01", endsOn: "2026-12-31" },
+    ...overrides,
+  });
+
+  it("shows the insurer only the cycles a producer linked, with the open claim", async () => {
+    const list = await call("insurer", "GET", "/v1/crop-cycles");
+    expect(list.body.items.map((c: any) => c.id)).toEqual([seed.outsideWindowCycleId]);
+    expect(list.body.items[0].insurance.openClaims).toBe(1);
+    const alerts = await call("financier", "GET", `/v1/alerts?cycleId=${seed.outsideWindowCycleId}`);
+    expect(alerts.body.map((a: any) => a.type)).toContain("CLAIM_OPEN");
+    const insurers = await call("financier", "GET", "/v1/orgs?kind=INSURER");
+    expect(insurers.body).toEqual([{ id: SEED.orgs.insurer, name: "Seguradora Safra Segura", kind: "INSURER" }]);
+  });
+
+  it("needs the producer's link before a policy, and only the producer can link", async () => {
+    const early = await call("insurer", "POST", "/v1/events", policy(seed.shortfallCycleId));
+    expect(early.body.code).toBe("FORBIDDEN_ORG");
+    expect((await call("producerMT", "POST", `/v1/crop-cycles/${seed.shortfallCycleId}/insurers`, { insurerOrgId: SEED.orgs.insurer })).status).toBe(404);
+    expect((await call("producerPR", "POST", `/v1/crop-cycles/${seed.shortfallCycleId}/insurers`, { insurerOrgId: SEED.orgs.buyer })).status).toBe(422);
+    const link = await call("producerPR", "POST", `/v1/crop-cycles/${seed.shortfallCycleId}/insurers`, { insurerOrgId: SEED.orgs.insurer });
+    expect(link.status).toBe(201);
+    expect((await call("producerPR", "POST", `/v1/crop-cycles/${seed.shortfallCycleId}/insurers`, { insurerOrgId: SEED.orgs.insurer })).status).toBe(200);
+    expect((await call("insurer", "POST", "/v1/events", policy(seed.shortfallCycleId))).status).toBe(201);
+  });
+
+  it("lets only the insurer settle the claim, which clears the alert", async () => {
+    const settle = { id: seedId(5201), subjectType: "CROP_CYCLE", subjectId: seed.outsideWindowCycleId, actorRole: "INSURER", actorOrgId: SEED.orgs.insurer, occurredAt: "2026-10-27T10:00:00-03:00", eventType: "CLAIM_SETTLED", quantity: 0, unit: "BRL_CENTS", evidenceHash: null, refEventId: null, payload: { claimId: SEED.claims.mtDrought, outcome: "DENIED", assessedLossKg: 20_000, settledOn: "2026-10-27", reason: "Perda abaixo da franquia" } };
+    expect((await call("producerMT", "POST", "/v1/events", { ...settle, actorRole: "PRODUCER", actorOrgId: SEED.orgs.producerMT })).body.code).toBe("FORBIDDEN_ROLE");
+    expect((await call("insurer", "POST", "/v1/events", settle)).status).toBe(201);
+    const alerts = await call("insurer", "GET", "/v1/alerts");
+    expect(alerts.body.map((a: any) => a.type)).not.toContain("CLAIM_OPEN");
+  });
+});
+
+describe("admin users and orgs", () => {
+  it("creates an org and invites a user whose role follows the org's kind", async () => {
+    expect((await call("financier", "GET", "/v1/admin/users")).status).toBe(403);
+    const org = await call("admin", "POST", "/v1/admin/orgs", { name: "Armazém Norte", kind: "WAREHOUSE", taxId: "12345678000190" });
+    expect(org.status).toBe(201);
+    const user = await call("admin", "POST", "/v1/admin/users", { email: "norte@example.com", name: "Operador", orgId: org.body.id });
+    expect(user.status).toBe(201);
+    expect(user.body).toMatchObject({ userId: seedId(290), role: "WAREHOUSE", orgName: "Armazém Norte" });
+    expect((await call("admin", "POST", "/v1/admin/users", { email: "NORTE@example.com", name: "Outro", orgId: org.body.id })).status).toBe(422);
+    const me = await app.inject({ method: "GET", url: "/v1/me", headers: { authorization: `Bearer dev:${seedId(290)}` } });
+    expect(me.json()).toMatchObject({ role: "WAREHOUSE", orgName: "Armazém Norte" });
+  });
+});
+
 describe("anchoring", () => {
   it("anchors every event in order and the on-chain hash chains match the database", async () => {
     let total = 0;
@@ -226,8 +287,8 @@ describe("anchoring", () => {
       total += r.anchored;
       if (r.anchored === 0) break;
     }
-    // 4 plot events + 22 (PR cycle) + 5 (MT cycle) + 4 recorded by the tests above.
-    expect(total).toBe(35);
+    // 4 plot events + 22 (PR cycle) + 7 (MT cycle) + 6 recorded by the tests above.
+    expect(total).toBe(39);
     const result = await reconcileAnchors(handle.db, chain, keys, { now });
     expect(result.mismatches).toEqual([]);
     expect(result.subjects).toBe(6); // 3 plots + 3 crop cycles

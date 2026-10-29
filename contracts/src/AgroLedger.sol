@@ -18,7 +18,7 @@ contract AgroLedger is IAgroLedger, ERC721, AccessControl, Pausable {
     uint16 public constant CPR_SETTLED = 16;
     uint16 public constant EVENT_CORRECTED = 17;
     uint16 public constant EVENT_VOIDED = 18;
-    uint16 public constant MAX_EVENT_TYPE = 18;
+    uint16 public constant MAX_EVENT_TYPE = 21; // 19-21: insurance events
 
     uint256 public constant MAX_BATCH = 50;
     // Tolerated clock skew between the backend and the chain.

@@ -24,6 +24,36 @@ export interface Delivery {
   };
 }
 
+export interface Policy {
+  eventId: string;
+  policyNumber: string;
+  insurerOrgId: string;
+  coverage: "CUSTEIO" | "PRODUTIVIDADE" | "FATURAMENTO" | "MULTIRRISCO";
+  insuredBrlCents: number;
+  insuredKg: number | null;
+  premiumBrlCents: number;
+  startsOn: string;
+  endsOn: string;
+}
+
+export interface Claim {
+  claimId: string;
+  eventId: string;
+  policyNumber: string;
+  insurerOrgId: string;
+  cause: string;
+  lossOn: string;
+  estimatedLossKg: number;
+  filedAt: string;
+  settlement: null | {
+    eventId: string;
+    outcome: "PAID" | "DENIED";
+    paidBrlCents: number;
+    assessedLossKg: number | null;
+    settledOn: string;
+  };
+}
+
 /** Everything known about a crop cycle, derived by replaying its events. JSON-serializable. */
 export interface CycleState {
   stage: CycleStage;
@@ -69,6 +99,8 @@ export interface CycleState {
     deliveredKg: number;
     cashSettledBrlCents: number | null;
   };
+  policies: Policy[];
+  claims: Claim[];
 }
 
 export interface ReplayContext {
@@ -95,6 +127,8 @@ export function initialCycleState(): CycleState {
     buyerOrgIds: [],
     infoRequests: [],
     settlement: null,
+    policies: [],
+    claims: [],
   };
 }
 
@@ -107,7 +141,9 @@ function requireStage(s: CycleState, allowed: CycleStage[], eventType: string): 
 /** Applies one (non-correction) event to the state, or throws ApiError if the transition is invalid. */
 export function applyCycleEvent(prev: CycleState, e: StoredEvent, ctx: ReplayContext): CycleState {
   const s = structuredClone(prev);
-  if (s.stage === "CLOSED" && e.eventType !== "INFO_REQUESTED") {
+  // A claim can outlive the CPR, so insurance events stay open after settlement.
+  const afterClose = ["INFO_REQUESTED", "POLICY_ISSUED", "CLAIM_FILED", "CLAIM_SETTLED"];
+  if (s.stage === "CLOSED" && !afterClose.includes(e.eventType)) {
     fail("INVALID_TRANSITION", `${e.eventType} is not allowed after the CPR is settled`);
   }
 
@@ -315,6 +351,65 @@ export function applyCycleEvent(prev: CycleState, e: StoredEvent, ctx: ReplayCon
         settledOn: p.settledOn,
         deliveredKg: e.quantity,
         cashSettledBrlCents: p.cashSettledBrlCents,
+      };
+      return s;
+    }
+
+    case "POLICY_ISSUED": {
+      const p = e.payload;
+      if (p.endsOn < p.startsOn) fail("VALIDATION_FAILED", "Policy ends before it starts");
+      if (s.policies.some((x) => x.policyNumber === p.policyNumber)) {
+        fail("INVALID_TRANSITION", `Policy ${p.policyNumber} is already recorded on this cycle`);
+      }
+      s.policies.push({
+        eventId: e.id,
+        policyNumber: p.policyNumber,
+        insurerOrgId: p.insurerOrgId,
+        coverage: p.coverage,
+        insuredBrlCents: e.quantity,
+        insuredKg: p.insuredKg,
+        premiumBrlCents: p.premiumBrlCents,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+      });
+      return s;
+    }
+
+    case "CLAIM_FILED": {
+      const p = e.payload;
+      const policy = s.policies.find((x) => x.policyNumber === p.policyNumber);
+      if (!policy) fail("VALIDATION_FAILED", `No policy ${p.policyNumber} on this cycle`);
+      if (p.lossOn < policy.startsOn || p.lossOn > policy.endsOn) {
+        fail("VALIDATION_FAILED", `Loss on ${p.lossOn} is outside the policy period ${policy.startsOn} to ${policy.endsOn}`);
+      }
+      if (s.claims.some((c) => c.claimId === p.claimId)) fail("INVALID_TRANSITION", "This claim was already filed");
+      s.claims.push({
+        claimId: p.claimId,
+        eventId: e.id,
+        policyNumber: p.policyNumber,
+        insurerOrgId: policy.insurerOrgId,
+        cause: p.cause,
+        lossOn: p.lossOn,
+        estimatedLossKg: e.quantity,
+        filedAt: e.occurredAt,
+        settlement: null,
+      });
+      return s;
+    }
+
+    case "CLAIM_SETTLED": {
+      const p = e.payload;
+      const claim = s.claims.find((c) => c.claimId === p.claimId);
+      if (!claim) fail("VALIDATION_FAILED", "No claim was filed with this claimId");
+      if (claim.settlement) fail("INVALID_TRANSITION", "This claim was already settled");
+      if (p.outcome === "DENIED" && e.quantity !== 0) fail("VALIDATION_FAILED", "A denied claim pays 0");
+      if (p.outcome === "PAID" && e.quantity === 0) fail("VALIDATION_FAILED", "A paid claim needs the amount paid");
+      claim.settlement = {
+        eventId: e.id,
+        outcome: p.outcome,
+        paidBrlCents: e.quantity,
+        assessedLossKg: p.assessedLossKg,
+        settledOn: p.settledOn,
       };
       return s;
     }

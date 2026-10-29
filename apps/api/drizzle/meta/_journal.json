@@ -15,6 +15,13 @@
       "when": 1793128710578,
       "tag": "0001_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793259856819,
+      "tag": "0002_insurers",
+      "breakpoints": true
     }
   ]
 }

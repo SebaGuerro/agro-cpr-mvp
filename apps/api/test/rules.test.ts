@@ -263,3 +263,54 @@ describe("risk", () => {
     expect(cycleFindings(late).map((f) => f.code)).toContain("PLANTING_WINDOW_MISSED");
   });
 });
+
+describe("insurance", () => {
+  const INSURER = uuid(8);
+  const CLAIM = uuid(9);
+  const policy = (policyNumber = "APL-1") =>
+    ev({
+      eventType: "POLICY_ISSUED",
+      actorRole: "INSURER",
+      actorOrgId: INSURER,
+      quantity: 50_000_000,
+      unit: "BRL_CENTS",
+      payload: { insurerOrgId: INSURER, policyNumber, coverage: "PRODUTIVIDADE", insuredKg: 100_000, premiumBrlCents: 2_000_000, startsOn: "2025-10-01", endsOn: "2026-04-30" },
+    });
+  const claim = (lossOn = "2025-12-20", claimId = CLAIM) =>
+    ev({ eventType: "CLAIM_FILED", occurredAt: "2025-12-22T10:00:00-03:00", quantity: 30_000, unit: "KG", payload: { claimId, policyNumber: "APL-1", cause: "GRANIZO", lossOn, description: "Granizo" } });
+  const settled = (outcome: "PAID" | "DENIED", amount: number) =>
+    ev({ eventType: "CLAIM_SETTLED", actorRole: "INSURER", actorOrgId: INSURER, quantity: amount, unit: "BRL_CENTS", payload: { claimId: CLAIM, outcome, assessedLossKg: 25_000, settledOn: "2026-01-20", reason: null } });
+
+  it("files a claim against a policy and settles it once", () => {
+    const s = replayCycle([cprIssued(), planting(), policy(), claim(), settled("PAID", 4_000_000)], ctx);
+    expect(s.policies).toHaveLength(1);
+    expect(s.claims[0]).toMatchObject({ insurerOrgId: INSURER, estimatedLossKg: 30_000, settlement: { outcome: "PAID", paidBrlCents: 4_000_000 } });
+    expectCode(() => replayCycle([policy(), claim(), settled("PAID", 1), settled("PAID", 1)], ctx), "INVALID_TRANSITION");
+  });
+
+  it("rejects claims without a policy, outside its period, and inconsistent settlements", () => {
+    expectCode(() => replayCycle([claim()], ctx), "VALIDATION_FAILED");
+    expectCode(() => replayCycle([policy(), claim("2026-06-01")], ctx), "VALIDATION_FAILED");
+    expectCode(() => replayCycle([policy(), policy()], ctx), "INVALID_TRANSITION");
+    expectCode(() => replayCycle([policy(), claim(), settled("DENIED", 100)], ctx), "VALIDATION_FAILED");
+    expectCode(() => replayCycle([policy(), claim(), settled("PAID", 0)], ctx), "VALIDATION_FAILED");
+  });
+
+  it("raises open and unanswered claim alerts without touching the risk grade", () => {
+    const state = replayCycle([policy(), claim()], ctx);
+    const base = { cycle: ctx.cycle, plot: { uf: "PR", municipalityIbge: "4104808" }, state, windows: [], templates: [], discountTables: [], toleranceBps: 200 };
+    const soon = cycleFindings({ ...base, now: new Date("2026-01-05T15:00:00Z") });
+    expect(soon.filter((f) => f.code.startsWith("CLAIM")).map((f) => f.code)).toEqual(["CLAIM_OPEN"]);
+    const later = cycleFindings({ ...base, now: new Date("2026-02-01T15:00:00Z") });
+    expect(later.filter((f) => f.code.startsWith("CLAIM")).map((f) => f.code)).toEqual(["CLAIM_OPEN", "CLAIM_UNANSWERED"]);
+    expect(later.filter((f) => f.code.startsWith("CLAIM")).every((f) => f.risk === null)).toBe(true);
+  });
+
+  it("still accepts insurance events after the CPR is settled", () => {
+    const deliveries = truck(uuid(60), 100_000);
+    const settle = ev({ eventType: "CPR_SETTLED", actorRole: "FINANCIER", actorOrgId: FINANCIER, quantity: 100_000, unit: "KG", payload: { outcome: "FULLY_DELIVERED", settledOn: "2026-03-01", cashSettledBrlCents: null } });
+    const s = replayCycle([cprIssued(), planting(), policy(), harvestStarted(), ...deliveries, settle, claim()], ctx);
+    expect(s.stage).toBe("CLOSED");
+    expect(s.claims).toHaveLength(1);
+  });
+});

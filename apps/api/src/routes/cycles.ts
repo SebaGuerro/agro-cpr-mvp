@@ -12,6 +12,8 @@ import {
   createCprRequest,
   createCropCycle,
   CropCycleInput,
+  linkedInsurers,
+  linkInsurer,
   rejectCprRequest,
 } from "../services/cycles.js";
 import {
@@ -83,6 +85,21 @@ export const cycleRoutes =
       const { cycleId } = parse(CycleParams, req.params);
       const cycle = await getVisibleCycle(db, actorOf(req), cycleId);
       return (await analyzeCycles(db, [cycle], riskDeps())).get(cycle.id)!.risk;
+    });
+
+    app.get("/v1/crop-cycles/:cycleId/insurers", async (req) => {
+      const { cycleId } = parse(CycleParams, req.params);
+      await getVisibleCycle(db, actorOf(req), cycleId);
+      return linkedInsurers(db, cycleId);
+    });
+
+    app.post("/v1/crop-cycles/:cycleId/insurers", async (req, reply) => {
+      const actor = actorOf(req);
+      const { cycleId } = parse(CycleParams, req.params);
+      const { insurerOrgId } = parse(z.object({ insurerOrgId: z.uuid() }), req.body);
+      await getVisibleCycle(db, actor, cycleId);
+      const result = await linkInsurer(db, actor, cycleId, insurerOrgId, deps.now());
+      return reply.code(result.created ? 201 : 200).send(result.insurers);
     });
 
     // ---------- CPR requests ----------

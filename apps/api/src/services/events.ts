@@ -2,7 +2,7 @@ import { CanonicalEvent, EMITTERS, type StoredEvent } from "@agro-cpr/spec";
 import { canonicalJson, recordHash } from "@agro-cpr/spec/keys";
 import { and, asc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { cprRequests, cropCycles, events, farms, files, orgs, plots } from "../db/schema.js";
+import { cprRequests, cropCycles, cycleInsurers, events, farms, files, orgs, plots } from "../db/schema.js";
 import { replayCycle, replayPlot, type CycleState } from "../domain/cycleState.js";
 import { ApiError, fail } from "../domain/errors.js";
 import type { Actor, CycleFacts } from "../domain/types.js";
@@ -32,6 +32,7 @@ const ROLE_OF_KIND = {
   WAREHOUSE: "WAREHOUSE",
   BUYER: "BUYER",
   FINANCIER: "FINANCIER",
+  INSURER: "INSURER",
 } as const;
 
 const MAX_FUTURE_MS = 5 * 60 * 1000;
@@ -133,7 +134,11 @@ export async function recordEventTx(tx: Db, actor: Actor, event: CanonicalEvent,
         .select({ financierOrgId: cprRequests.financierOrgId })
         .from(cprRequests)
         .where(eq(cprRequests.cropCycleId, cycle.id));
-      authorizeCycleEvent(event, cycle, requests.map((r) => r.financierOrgId));
+      const insurers = await tx
+        .select({ insurerOrgId: cycleInsurers.insurerOrgId })
+        .from(cycleInsurers)
+        .where(eq(cycleInsurers.cropCycleId, cycle.id));
+      authorizeCycleEvent(event, cycle, requests.map((r) => r.financierOrgId), insurers.map((i) => i.insurerOrgId));
     }
     const ctx = { cycle: cycleFacts(cycle), toleranceBps: opts.toleranceBps };
     newCycleState = validateReplay(isCorrection, () => replayCycle([...stream, stored], ctx));
@@ -260,7 +265,10 @@ function authorizePlotEvent(event: CanonicalEvent, plot: PlotRow): void {
   }
 }
 
-function authorizeCycleEvent(event: CanonicalEvent, cycle: CycleRow, requestFinancierIds: string[]): void {
+function authorizeCycleEvent(event: CanonicalEvent, cycle: CycleRow, requestFinancierIds: string[], linkedInsurerIds: string[]): void {
+  if (event.eventType === "POLICY_ISSUED" && !linkedInsurerIds.includes(event.payload.insurerOrgId)) {
+    fail("FORBIDDEN_ORG", "The producer has not linked this insurer to the crop cycle");
+  }
   if (event.actorRole === "ADMIN") return;
   const org = event.actorOrgId;
   const cpr = cycle.state.cpr;
@@ -279,6 +287,14 @@ function authorizeCycleEvent(event: CanonicalEvent, cycle: CycleRow, requestFina
     case "CDA_ISSUED":
     case "GRAIN_RELEASED":
       return must(org === cpr?.warehouseOrgId, "Only the CPR's designated warehouse can record this");
+    case "CLAIM_FILED":
+      return must(org === cycle.producerOrgId, "Only the crop cycle's producer can file a claim");
+    case "POLICY_ISSUED":
+      return must(org === event.payload.insurerOrgId, "Insurers can only issue their own policies");
+    case "CLAIM_SETTLED": {
+      const claim = cycle.state.claims.find((c) => c.claimId === event.payload.claimId);
+      return must(!claim || org === claim.insurerOrgId, "Only the policy's insurer can settle this claim");
+    }
     case "CPR_ISSUED":
       return must(org === event.payload.financierOrgId, "Only the CPR's financier can issue it");
     case "FUNDING_DISBURSED":

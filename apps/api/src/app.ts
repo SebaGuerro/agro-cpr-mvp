@@ -9,6 +9,7 @@ import type { Db } from "./db/client.js";
 import { memberships } from "./db/schema.js";
 import { ApiError } from "./domain/errors.js";
 import type { Actor } from "./domain/types.js";
+import { adminRoutes } from "./routes/admin.js";
 import { alertRoutes } from "./routes/alerts.js";
 import { configRoutes } from "./routes/config.js";
 import { coreRoutes } from "./routes/core.js";
@@ -29,6 +30,8 @@ export interface AppDeps {
   onEventRecorded?: () => void;
   /** How long imported events wait before anchoring (the rollback window). Default 30 minutes. */
   importHoldMs?: number;
+  /** Creates (or invites) an auth user for this email and returns its user id. */
+  inviteUser?: (email: string) => Promise<string>;
   logger?: boolean;
 }
 
@@ -98,5 +101,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(alertRoutes(deps));
   await app.register(configRoutes(deps));
   await app.register(importRoutes(deps));
+  await app.register(adminRoutes(deps));
   return app;
 }

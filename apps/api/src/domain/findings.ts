@@ -21,6 +21,8 @@ export const DERIVED_ALERT_TYPES = [
   "QUALITY_TICKET_MISMATCH",
   "CPR_DUE_SOON",
   "INFO_REQUEST_OPEN",
+  "CLAIM_OPEN",
+  "CLAIM_UNANSWERED",
 ] as const;
 export type DerivedAlertType = (typeof DERIVED_ALERT_TYPES)[number];
 
@@ -46,6 +48,16 @@ export interface FindingInputs {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Messages are shown to users as written, so they are in Portuguese with Brazilian formats.
+const br = (date: string | null) => (date ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "");
+const brTime = (iso: string) => {
+  const local = new Date(Date.parse(iso) - 3 * 3600_000).toISOString();
+  return `${br(local)} ${local.slice(11, 16)}`;
+};
+const kg = (n: number) => `${new Intl.NumberFormat("pt-BR").format(n)} kg`;
+const INFO_TOPIC: Record<string, string> = { PLANTING: "plantio", INPUTS: "insumos", HARVEST: "colheita", DELIVERY: "entrega", DOCUMENTS: "documentos", OTHER: "outro assunto" };
+const CAUSE: Record<string, string> = { SECA: "seca", GEADA: "geada", GRANIZO: "granizo", EXCESSO_CHUVA: "excesso de chuva", PRAGA_DOENCA: "praga ou doença", INCENDIO: "incêndio", OUTRO: "outra causa" };
+
 export function cycleFindings(i: FindingInputs): Finding[] {
   const { cycle, state: s } = i;
   const today = localDate(i.now);
@@ -65,7 +77,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
       const { start, end } = windowDates(window, cycle.seasonCode);
       add({
         code: "PLANTED_OUTSIDE_WINDOW",
-        message: `Planted ${s.planting.startedOn} to ${s.planting.finishedOn}, outside the window ${start} to ${end}`,
+        message: `Plantio de ${br(s.planting.startedOn)} a ${br(s.planting.finishedOn)}, fora da janela de ${br(start)} a ${br(end)}`,
         eventId: s.planting.eventId,
         risk: { dimension: "PLANTING_WINDOW", points: 100 },
         alert: { type: "PLANTED_OUTSIDE_WINDOW", severity: "HIGH" },
@@ -73,7 +85,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
     } else if (check === "NO_WINDOW") {
       add({
         code: "NO_WINDOW_CONFIGURED",
-        message: `No planting window configured for ${cycle.crop} ${cycle.seasonCode} in ${i.plot.uf}`,
+        message: `Sem janela de plantio configurada para ${cycle.crop} ${cycle.seasonCode} em ${i.plot.uf}`,
         eventId: null,
         risk: { dimension: "PLANTING_WINDOW", points: 40 },
       });
@@ -81,7 +93,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
   } else if (window && today > windowDates(window, cycle.seasonCode).end) {
     add({
       code: "PLANTING_WINDOW_MISSED",
-      message: `No planting recorded and the window closed on ${windowDates(window, cycle.seasonCode).end}`,
+      message: `Nenhum plantio registrado e a janela fechou em ${br(windowDates(window, cycle.seasonCode).end)}`,
       eventId: null,
       risk: { dimension: "PLANTING_WINDOW", points: 80 },
       alert: { type: "PLANTING_WINDOW_MISSED", severity: "HIGH" },
@@ -93,7 +105,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
   if (!template) {
     add({
       code: "NO_CHECKLIST",
-      message: `No input checklist configured for ${cycle.crop}`,
+      message: `Sem checklist de insumos configurado para ${cycle.crop}`,
       eventId: null,
       risk: { dimension: "INPUT_COMPLIANCE", points: 20 },
     });
@@ -102,7 +114,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
       if (st.status === "MISSING") {
         add({
           code: "APPLICATION_MISSING",
-          message: `"${st.item.description}" not recorded (due by ${st.dueBy})`,
+          message: `"${st.item.description}" não registrado (prazo ${br(st.dueBy)})`,
           eventId: null,
           risk: { dimension: "INPUT_COMPLIANCE", points: 35 },
           alert: { type: "APPLICATION_MISSING", severity: "WARNING", key: st.item.id },
@@ -110,7 +122,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
       } else if (st.status === "LATE") {
         add({
           code: "APPLICATION_LATE",
-          message: `"${st.item.description}" applied outside its period (due by ${st.dueBy})`,
+          message: `"${st.item.description}" aplicado fora do período (prazo ${br(st.dueBy)})`,
           eventId: st.eventId,
           risk: { dimension: "INPUT_COMPLIANCE", points: 15 },
           alert: { type: "APPLICATION_LATE", severity: "INFO", key: st.item.id },
@@ -123,7 +135,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
   if (s.harvest?.withoutPlan) {
     add({
       code: "HARVEST_NOT_PLANNED",
-      message: "Harvest started without a declared harvest plan",
+      message: "Colheita iniciada sem plano de colheita declarado",
       eventId: s.harvest.eventId,
       risk: { dimension: "HARVEST_DELIVERY", points: 20 },
       alert: { type: "HARVEST_NOT_PLANNED", severity: "WARNING" },
@@ -132,7 +144,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
   if (s.harvestPlan && !s.harvest && today > addDays(s.harvestPlan.plannedStart, 7)) {
     add({
       code: "HARVEST_OVERDUE",
-      message: `Harvest was planned to start ${s.harvestPlan.plannedStart} and has not started`,
+      message: `A colheita estava prevista para ${br(s.harvestPlan.plannedStart)} e não começou`,
       eventId: s.harvestPlan.eventId,
       risk: { dimension: "HARVEST_DELIVERY", points: 30 },
       alert: { type: "HARVEST_OVERDUE", severity: "WARNING" },
@@ -142,7 +154,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
     if (!d.arrivedAt && i.now.getTime() > Date.parse(d.expectedArrivalAt) + DAY_MS) {
       add({
         code: "DELIVERY_OVERDUE",
-        message: `Truck ${d.truckPlate} was expected ${d.expectedArrivalAt} and has not arrived`,
+        message: `Caminhão ${d.truckPlate} era esperado em ${brTime(d.expectedArrivalAt)} e não chegou`,
         eventId: d.dispatchedEventId,
         risk: { dimension: "HARVEST_DELIVERY", points: 25 },
         alert: { type: "DELIVERY_OVERDUE", severity: "WARNING" },
@@ -154,7 +166,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
       if (isTicketMismatch(d.received.grossKg, d.received.discountKg, expected)) {
         add({
           code: "QUALITY_TICKET_MISMATCH",
-          message: `Ticket ${d.received.ticketNumber} discounts ${d.received.discountKg} kg; the table gives ${expected} kg`,
+          message: `Ticket ${d.received.ticketNumber} desconta ${kg(d.received.discountKg)}; pela tabela seriam ${kg(expected)}`,
           eventId: d.received.eventId,
           risk: { dimension: "HARVEST_DELIVERY", points: 10 },
           alert: { type: "QUALITY_TICKET_MISMATCH", severity: "WARNING" },
@@ -170,7 +182,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
   ) {
     add({
       code: "DELIVERY_SHORTFALL",
-      message: `Delivered ${s.receivedNetKg} of ${s.cpr.issuedKg} kg after the delivery window closed (${s.cpr.deliveryWindowEnd})`,
+      message: `Entregues ${kg(s.receivedNetKg)} de ${kg(s.cpr.issuedKg)} e a janela de entrega fechou em ${br(s.cpr.deliveryWindowEnd)}`,
       eventId: null,
       risk: { dimension: "HARVEST_DELIVERY", points: 60 },
       alert: { type: "DELIVERY_SHORTFALL", severity: "HIGH" },
@@ -183,7 +195,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
     if (daysLeft <= 30) {
       add({
         code: "CPR_DUE_SOON",
-        message: daysLeft < 0 ? `CPR due ${s.cpr.dueDate}, ${-daysLeft} days overdue` : `CPR due in ${daysLeft} days (${s.cpr.dueDate})`,
+        message: daysLeft < 0 ? `CPR venceu em ${br(s.cpr.dueDate)}, há ${-daysLeft} dias` : `CPR vence em ${daysLeft} dias (${br(s.cpr.dueDate)})`,
         eventId: s.cpr.eventId,
         risk: null,
         alert: { type: "CPR_DUE_SOON", severity: daysLeft < 0 ? "HIGH" : "WARNING" },
@@ -194,7 +206,7 @@ export function cycleFindings(i: FindingInputs): Finding[] {
     for (const r of s.infoRequests) {
       add({
         code: "INFO_REQUEST_OPEN",
-        message: `Information requested about ${r.topic}${r.dueDate ? ` by ${r.dueDate}` : ""}`,
+        message: `Informação pedida sobre ${INFO_TOPIC[r.topic] ?? r.topic}${r.dueDate ? `, até ${br(r.dueDate)}` : ""}`,
         eventId: r.eventId,
         risk: null,
         alert: { type: "INFO_REQUEST_OPEN", severity: r.dueDate && today > r.dueDate ? "WARNING" : "INFO" },
@@ -202,8 +214,33 @@ export function cycleFindings(i: FindingInputs): Finding[] {
     }
   }
 
+  // ---- insurance (never part of the risk grade) ----
+  for (const c of s.claims) {
+    if (c.settlement) continue;
+    add({
+      code: "CLAIM_OPEN",
+      message: `Sinistro na apólice ${c.policyNumber}: ${CAUSE[c.cause] ?? c.cause}, perda estimada de ${kg(c.estimatedLossKg)} em ${br(c.lossOn)}`,
+      eventId: c.eventId,
+      risk: null,
+      alert: { type: "CLAIM_OPEN", severity: "HIGH", key: c.claimId },
+    });
+    const days = daysBetween(localDate(c.filedAt), today);
+    if (days > CLAIM_ANSWER_DAYS) {
+      add({
+        code: "CLAIM_UNANSWERED",
+        message: `Sinistro na apólice ${c.policyNumber} comunicado há ${days} dias, sem resposta da seguradora`,
+        eventId: c.eventId,
+        risk: null,
+        alert: { type: "CLAIM_UNANSWERED", severity: "HIGH", key: c.claimId },
+      });
+    }
+  }
+
   return out;
 }
+
+/** Days an insurer has to answer a claim before CLAIM_UNANSWERED is raised. */
+export const CLAIM_ANSWER_DAYS = 30;
 
 export const RISK_WEIGHTS: Record<Dimension, number> = {
   PLANTING_WINDOW: 0.4,

@@ -20,6 +20,13 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
         "401": { $ref: "#/components/responses/Problem" }
 
+  /v1/orgs:
+    get:
+      summary: Organizations (id, name, kind only) for pickers such as warehouse, financier and insurer
+      parameters: [{ name: kind, in: query, schema: { type: string, enum: [PLATFORM, PRODUCER, WAREHOUSE, BUYER, FINANCIER, INSURER] } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/OrgRef" } } } } }
+
   /v1/farms:
     get:
       summary: List farms visible to the caller
@@ -102,6 +109,23 @@ paths:
       parameters: [{ $ref: "#/components/parameters/CycleId" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RiskAssessment" } } } }
+
+  /v1/crop-cycles/{cycleId}/insurers:
+    get:
+      summary: Insurers linked to this crop cycle
+      parameters: [{ $ref: "#/components/parameters/CycleId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/OrgRef" } } } } }
+    post:
+      summary: Link an insurer to the crop cycle so it can see it and issue a policy (the cycle's PRODUCER, ADMIN)
+      parameters: [{ $ref: "#/components/parameters/CycleId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [insurerOrgId], properties: { insurerOrgId: { type: string, format: uuid } } } } }
+      responses:
+        "201": { description: Linked, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/OrgRef" } } } } }
+        "200": { description: Already linked }
+        "422": { $ref: "#/components/responses/Problem" }
 
   /v1/cpr-requests:
     get:
@@ -259,6 +283,49 @@ paths:
       responses:
         "200": { description: OK }
 
+  /v1/admin/orgs:
+    get:
+      summary: All organizations, with tax ids (ADMIN)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AdminOrg" } } } } }
+    post:
+      summary: Create an organization (ADMIN)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, kind]
+              properties:
+                name: { type: string }
+                kind: { type: string, enum: [PLATFORM, PRODUCER, WAREHOUSE, BUYER, FINANCIER, INSURER] }
+                taxId: { type: [string, "null"], description: CPF (11 digits) or CNPJ (14 digits), numbers only }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AdminOrg" } } } }
+
+  /v1/admin/users:
+    get:
+      summary: All users and their organization (ADMIN)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AdminUser" } } } } }
+    post:
+      summary: Invite a user by email and link them to an organization (ADMIN). The role follows the organization's kind.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, orgId]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+                orgId: { type: string, format: uuid }
+      responses:
+        "201": { description: Invited, content: { application/json: { schema: { $ref: "#/components/schemas/AdminUser" } } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
   /v1/imports/templates/{kind}:
     get:
       summary: Excel template for one import kind, with the caller's valid farms, plots, seasons, checklist items and evidence files
@@ -382,7 +449,7 @@ components:
           type: array
           items: { type: object, properties: { path: { type: string }, message: { type: string } } }
 
-    Role: { type: string, enum: [PRODUCER, WAREHOUSE, BUYER, FINANCIER, ADMIN] }
+    Role: { type: string, enum: [PRODUCER, WAREHOUSE, BUYER, FINANCIER, INSURER, ADMIN] }
     Crop: { type: string, enum: [SOJA, MILHO, TRIGO, SORGO, FEIJAO] }
     SeasonCode: { type: string, pattern: '^\d{4}/\d{2}-(SAFRA|SAFRINHA|UNICA)$', examples: ["2026/27-SAFRA"] }
     CycleStage: { type: string, enum: [CREATED, PLANTED, HARVEST_PLANNED, HARVESTING, DELIVERING, DELIVERED, CLOSED] }
@@ -445,7 +512,7 @@ components:
         expectedYieldKgPerHa: { type: integer, minimum: 1, description: "e.g. 3600 = 60 sc/ha" }
     CropCycle:
       type: object
-      required: [id, plotId, producerOrgId, crop, seasonCode, areaM2, expectedYieldKgPerHa, potentialKg, haircutBps, eligibleKg, stage, cpr, fulfillment, risk]
+      required: [id, plotId, producerOrgId, crop, seasonCode, areaM2, expectedYieldKgPerHa, potentialKg, haircutBps, eligibleKg, stage, cpr, fulfillment, risk, insurance]
       properties:
         id: { type: string, format: uuid }
         plotId: { type: string, format: uuid }
@@ -479,6 +546,47 @@ components:
             fulfilledBps: { type: integer, description: "10000 = 100%" }
             trucksInTransit: { type: integer }
         risk: { $ref: "#/components/schemas/RiskSummary" }
+        insurance:
+          type: object
+          description: Policies and claims on this cycle. Never part of the risk grade.
+          required: [policies, claims, openClaims]
+          properties:
+            policies:
+              type: array
+              items:
+                type: object
+                properties:
+                  eventId: { type: string, format: uuid }
+                  policyNumber: { type: string }
+                  insurerOrgId: { type: string, format: uuid }
+                  coverage: { type: string, enum: [CUSTEIO, PRODUTIVIDADE, FATURAMENTO, MULTIRRISCO] }
+                  insuredBrlCents: { type: integer }
+                  insuredKg: { type: [integer, "null"] }
+                  premiumBrlCents: { type: integer }
+                  startsOn: { type: string, format: date }
+                  endsOn: { type: string, format: date }
+            claims:
+              type: array
+              items:
+                type: object
+                properties:
+                  claimId: { type: string, format: uuid }
+                  eventId: { type: string, format: uuid }
+                  policyNumber: { type: string }
+                  insurerOrgId: { type: string, format: uuid }
+                  cause: { type: string }
+                  lossOn: { type: string, format: date }
+                  estimatedLossKg: { type: integer }
+                  filedAt: { type: string, format: date-time }
+                  settlement:
+                    type: [object, "null"]
+                    properties:
+                      eventId: { type: string, format: uuid }
+                      outcome: { type: string, enum: [PAID, DENIED] }
+                      paidBrlCents: { type: integer }
+                      assessedLossKg: { type: [integer, "null"] }
+                      settledOn: { type: string, format: date }
+            openClaims: { type: integer }
     CropCyclePage:
       type: object
       required: [items]
@@ -578,7 +686,7 @@ components:
         id: { type: string, format: uuid }
         type:
           type: string
-          enum: [PLANTED_OUTSIDE_WINDOW, PLANTING_WINDOW_MISSED, APPLICATION_MISSING, APPLICATION_LATE, HARVEST_NOT_PLANNED, HARVEST_OVERDUE, DELIVERY_OVERDUE, DELIVERY_SHORTFALL, QUALITY_TICKET_MISMATCH, CPR_DUE_SOON, INFO_REQUEST_OPEN, ANCHOR_FAILED]
+          enum: [PLANTED_OUTSIDE_WINDOW, PLANTING_WINDOW_MISSED, APPLICATION_MISSING, APPLICATION_LATE, HARVEST_NOT_PLANNED, HARVEST_OVERDUE, DELIVERY_OVERDUE, DELIVERY_SHORTFALL, QUALITY_TICKET_MISMATCH, CPR_DUE_SOON, INFO_REQUEST_OPEN, CLAIM_OPEN, CLAIM_UNANSWERED, ANCHOR_FAILED]
         severity: { type: string, enum: [INFO, WARNING, HIGH] }
         cropCycleId: { type: [string, "null"], format: uuid, description: Null for alerts about a plot }
         resolvedAt: { type: [string, "null"], format: date-time }
@@ -662,6 +770,36 @@ components:
               description: { type: string }
               fromDay: { type: integer, description: Days relative to planting start; negative = before planting }
               toDay: { type: integer }
+
+    AdminOrg:
+      type: object
+      required: [id, name, kind, taxId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [PLATFORM, PRODUCER, WAREHOUSE, BUYER, FINANCIER, INSURER] }
+        taxId: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AdminUser:
+      type: object
+      required: [userId, email, name, role, orgId, orgName]
+      properties:
+        userId: { type: string, format: uuid }
+        email: { type: [string, "null"] }
+        name: { type: [string, "null"] }
+        role: { $ref: "#/components/schemas/Role" }
+        orgId: { type: string, format: uuid }
+        orgName: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    OrgRef:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [PLATFORM, PRODUCER, WAREHOUSE, BUYER, FINANCIER, INSURER] }
 
     ImportKind:
       type: string

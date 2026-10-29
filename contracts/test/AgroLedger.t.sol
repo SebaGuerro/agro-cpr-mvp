@@ -23,6 +23,9 @@ contract AgroLedgerTest is Test {
     uint16 constant CPR_SETTLED = 16;
     uint16 constant EVENT_CORRECTED = 17;
     uint16 constant EVENT_VOIDED = 18;
+    uint16 constant POLICY_ISSUED = 19;
+    uint16 constant CLAIM_FILED = 20;
+    uint16 constant CLAIM_SETTLED = 21;
 
     AgroLedger ledger;
     address admin = makeAddr("adminSafe");
@@ -262,7 +265,7 @@ contract AgroLedgerTest is Test {
         vm.expectRevert(IAgroLedger.InvalidEventInput.selector);
         ledger.recordEvent(e);
 
-        e = _ev(cycle, 19, IAgroLedger.Unit.None, 0);
+        e = _ev(cycle, 22, IAgroLedger.Unit.None, 0); // above MAX_EVENT_TYPE
         vm.prank(relayer);
         vm.expectRevert(IAgroLedger.InvalidEventInput.selector);
         ledger.recordEvent(e);
@@ -283,6 +286,21 @@ contract AgroLedgerTest is Test {
         vm.prank(relayer);
         vm.expectRevert(IAgroLedger.InvalidEventInput.selector);
         ledger.recordEvent(e);
+    }
+
+    // ---------- insurance (codes 19-21, appended after the first release) ----------
+
+    function test_InsuranceEvents_AreRecordedOnTheCycleChain() public {
+        bytes32 cycle = _cycleKey();
+        _issue(1_000_000);
+        _record(_ev(cycle, POLICY_ISSUED, IAgroLedger.Unit.BrlCents, 250_000_000));
+        _record(_ev(cycle, CLAIM_FILED, IAgroLedger.Unit.Kg, 120_000));
+        IAgroLedger.EventInput memory settled = _ev(cycle, CLAIM_SETTLED, IAgroLedger.Unit.BrlCents, 0); // denied
+        _record(settled);
+        (uint64 seq,) = ledger.headOf(cycle);
+        assertEq(seq, 4);
+        assertTrue(ledger.isRecorded(settled.eventId));
+        assertEq(ledger.MAX_EVENT_TYPE(), CLAIM_SETTLED);
     }
 
     // ---------- corrections ----------

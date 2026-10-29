@@ -135,6 +135,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -463,6 +464,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -726,6 +728,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -1012,6 +1015,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -1249,6 +1253,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -1494,6 +1499,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -1779,6 +1785,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -2001,6 +2008,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -2214,6 +2222,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -2447,6 +2456,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -2665,6 +2675,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -2923,6 +2934,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -3151,6 +3163,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -3385,6 +3398,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -3619,6 +3633,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -3863,6 +3878,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -4100,6 +4116,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -4360,6 +4377,7 @@
             "WAREHOUSE",
             "BUYER",
             "FINANCIER",
+            "INSURER",
             "ADMIN"
           ]
         },
@@ -4416,6 +4434,774 @@
             }
           },
           "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "recordedAt",
+        "recordedBy",
+        "anchor",
+        "voided",
+        "correctedBy",
+        "provenance",
+        "importBatchId",
+        "id",
+        "subjectId",
+        "actorRole",
+        "actorOrgId",
+        "occurredAt",
+        "subjectType",
+        "eventType",
+        "quantity",
+        "unit",
+        "evidenceHash",
+        "refEventId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "recordedBy": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "ANCHORED",
+                "FAILED"
+              ]
+            },
+            "recordHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "chainId": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "txHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "blockNumber": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchoredAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "recordHash",
+            "chainId",
+            "txHash",
+            "blockNumber",
+            "anchoredAt"
+          ],
+          "additionalProperties": false
+        },
+        "voided": {
+          "type": "boolean"
+        },
+        "correctedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "provenance": {
+          "type": "string",
+          "enum": [
+            "MANUAL",
+            "IMPORTED",
+            "VERIFIED"
+          ]
+        },
+        "importBatchId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "subjectId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": [
+            "PRODUCER",
+            "WAREHOUSE",
+            "BUYER",
+            "FINANCIER",
+            "INSURER",
+            "ADMIN"
+          ]
+        },
+        "actorOrgId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "subjectType": {
+          "type": "string",
+          "const": "CROP_CYCLE"
+        },
+        "eventType": {
+          "type": "string",
+          "const": "POLICY_ISSUED"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unit": {
+          "type": "string",
+          "const": "BRL_CENTS"
+        },
+        "evidenceHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refEventId": {
+          "type": "null"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "insurerOrgId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "policyNumber": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "coverage": {
+              "type": "string",
+              "enum": [
+                "CUSTEIO",
+                "PRODUTIVIDADE",
+                "FATURAMENTO",
+                "MULTIRRISCO"
+              ]
+            },
+            "insuredKg": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "premiumBrlCents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "startsOn": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            },
+            "endsOn": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          "required": [
+            "insurerOrgId",
+            "policyNumber",
+            "coverage",
+            "insuredKg",
+            "premiumBrlCents",
+            "startsOn",
+            "endsOn"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "recordedAt",
+        "recordedBy",
+        "anchor",
+        "voided",
+        "correctedBy",
+        "provenance",
+        "importBatchId",
+        "id",
+        "subjectId",
+        "actorRole",
+        "actorOrgId",
+        "occurredAt",
+        "subjectType",
+        "eventType",
+        "quantity",
+        "unit",
+        "evidenceHash",
+        "refEventId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "recordedBy": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "ANCHORED",
+                "FAILED"
+              ]
+            },
+            "recordHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "chainId": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "txHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "blockNumber": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchoredAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "recordHash",
+            "chainId",
+            "txHash",
+            "blockNumber",
+            "anchoredAt"
+          ],
+          "additionalProperties": false
+        },
+        "voided": {
+          "type": "boolean"
+        },
+        "correctedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "provenance": {
+          "type": "string",
+          "enum": [
+            "MANUAL",
+            "IMPORTED",
+            "VERIFIED"
+          ]
+        },
+        "importBatchId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "subjectId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": [
+            "PRODUCER",
+            "WAREHOUSE",
+            "BUYER",
+            "FINANCIER",
+            "INSURER",
+            "ADMIN"
+          ]
+        },
+        "actorOrgId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "subjectType": {
+          "type": "string",
+          "const": "CROP_CYCLE"
+        },
+        "eventType": {
+          "type": "string",
+          "const": "CLAIM_FILED"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unit": {
+          "type": "string",
+          "const": "KG"
+        },
+        "evidenceHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refEventId": {
+          "type": "null"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "claimId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "policyNumber": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "cause": {
+              "type": "string",
+              "enum": [
+                "SECA",
+                "GEADA",
+                "GRANIZO",
+                "EXCESSO_CHUVA",
+                "PRAGA_DOENCA",
+                "INCENDIO",
+                "OUTRO"
+              ]
+            },
+            "lossOn": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "claimId",
+            "policyNumber",
+            "cause",
+            "lossOn",
+            "description"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "recordedAt",
+        "recordedBy",
+        "anchor",
+        "voided",
+        "correctedBy",
+        "provenance",
+        "importBatchId",
+        "id",
+        "subjectId",
+        "actorRole",
+        "actorOrgId",
+        "occurredAt",
+        "subjectType",
+        "eventType",
+        "quantity",
+        "unit",
+        "evidenceHash",
+        "refEventId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "recordedBy": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "ANCHORED",
+                "FAILED"
+              ]
+            },
+            "recordHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "chainId": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "txHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "blockNumber": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchoredAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "recordHash",
+            "chainId",
+            "txHash",
+            "blockNumber",
+            "anchoredAt"
+          ],
+          "additionalProperties": false
+        },
+        "voided": {
+          "type": "boolean"
+        },
+        "correctedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "provenance": {
+          "type": "string",
+          "enum": [
+            "MANUAL",
+            "IMPORTED",
+            "VERIFIED"
+          ]
+        },
+        "importBatchId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "subjectId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": [
+            "PRODUCER",
+            "WAREHOUSE",
+            "BUYER",
+            "FINANCIER",
+            "INSURER",
+            "ADMIN"
+          ]
+        },
+        "actorOrgId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "subjectType": {
+          "type": "string",
+          "const": "CROP_CYCLE"
+        },
+        "eventType": {
+          "type": "string",
+          "const": "CLAIM_SETTLED"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unit": {
+          "type": "string",
+          "const": "BRL_CENTS"
+        },
+        "evidenceHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refEventId": {
+          "type": "null"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "claimId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "PAID",
+                "DENIED"
+              ]
+            },
+            "assessedLossKg": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "settledOn": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "claimId",
+            "outcome",
+            "assessedLossKg",
+            "settledOn",
             "reason"
           ],
           "additionalProperties": false
